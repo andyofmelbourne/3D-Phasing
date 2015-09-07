@@ -1,0 +1,17 @@
+*.dat
+*.bin
+*.log
+*.txt
+*.out
+.*.out
+*.lst
+data
+probsum/
+logs/
+rot/
+/utils/*
+!/utils/src
+src/config.conf
+src/dconfig.conf
+*.png
+*.raw
