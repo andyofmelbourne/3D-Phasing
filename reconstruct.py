@@ -4,7 +4,6 @@ import numpy as np
 import time
 import sys
 import ConfigParser
-from scipy import ndimage
 from utils import io_utils
 
 #
@@ -15,8 +14,10 @@ try :
     import pyopencl.array
     from pyfft.cl import Plan
     GPU_calc = True
+    from src.projection_maps_gpu import *
 except :
     GPU_calc = False
+    from src.projection_maps import *
 
 
 def read_data(params):
@@ -62,15 +63,6 @@ def fit_sphere_to_autoc(diff):
     return sphere
 
 
-def Pmod(amp, psi, good_pix):
-    psi           = np.fft.fftn(psi)
-    phase         = np.angle(psi)
-    phase         = ndimage.gaussian_filter(phase, 0.5)
-    psi[good_pix] = amp[good_pix] * np.exp(1J * phase[good_pix])
-    psi           = np.fft.ifftn(psi)
-    return psi
-
-
 def shrink(arrayin, thresh, blur):
     mask = arrayin > np.median(arrayin)
     mask = threshExpand(mask, 0.5, blur)
@@ -91,35 +83,9 @@ def threshExpand(arrayin, thresh=0.1e0, blur=8):
     return arrayout
 
 
-def _ERA(psi, support, good_pix, amp):
-    psi_sup = psi * support
-    psi     = Pmod(amp, psi_sup.copy(), good_pix) 
-    
-    delta = psi - psi_sup
-    support_err = np.sum( (delta * np.conj(delta)).real )
-    
-    delta = psi - psi_sup
-    mod_err = np.sum( (delta * np.conj(delta)).real )
-
-    return psi, mod_err, support_err
-
-
-def _DM(psi, support, good_pix, amp):
-    psi_sup = psi * support
-
-    psi += Pmod(amp, 2*psi_sup - psi, good_pix) - psi_sup
-    
-    delta       = psi * ~support
-    support_err = np.sum( (delta * np.conj(delta)).real ) 
-    
-    delta       = psi - Pmod(amp, psi, good_pix)
-    mod_err     = np.sum( (delta * np.conj(delta)).real ) 
-    return psi, mod_err, support_err
-
-
 def iterate(diff, support, mask, params):
     # shift quadrants for faster iters
-    good_pix = np.where(np.fft.ifftshift(mask))
+    good_pix = np.fft.ifftshift(mask)
     amp      = np.sqrt(np.fft.ifftshift(diff))
     support  = np.fft.ifftshift(support)
     
@@ -128,8 +94,35 @@ def iterate(diff, support, mask, params):
     support_error, mod_error = [], []
     psi  = np.random.random(amp.shape) + 0J 
     psi *= support
+
+    # send all the arrays to the gpu
+    # we need : psi, support, amp, phase
+    if GPU_calc :
+        # get the CUDA platform
+        platforms = pyopencl.get_platforms()
+        for p in platforms:
+            if p.name == 'NVIDIA CUDA':
+                platform = p
+         
+        # get one of the gpu's device id
+        device = platform.get_devices()[0]
+        
+        # create a context for the device
+        context = pyopencl.Context([device])
+        
+        # create a command queue for the device
+        queue = pyopencl.CommandQueue(context)
+        
+        # make a plan for the ffts
+        plan = Plan(psi.shape, dtype=psi.dtype, queue=queue)
+        
+        # send it to the gpu
+        psi      = pyopencl.array.to_device(queue, psi)
+        support  = pyopencl.array.to_device(queue, support)
+        amp      = pyopencl.array.to_device(queue, amp)
+        phase    = pyopencl.array.to_device(queue, np.zeros_like(amp))
     
-    alg = params['recon']['alg'].split()
+    alg   = params['recon']['alg'].split()
     iters = np.array(alg[::2], dtype=np.int)
     algs  = alg[1::2]
     
@@ -138,10 +131,10 @@ def iterate(diff, support, mask, params):
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
-                psi, mod_err, support_err = _DM(psi, support, good_pix, amp)
+                psi, mod_err, support_err = DM(psi, support, good_pix, amp)
                 
             elif alg == 'ERA':
-                psi, mod_err, support_err = _ERA(psi, support, good_pix, amp)
+                psi, mod_err, support_err = ERA(psi, support, good_pix, amp)
 
             elif alg == 'shrink':
                 print '\n performing shrink wrap:'
