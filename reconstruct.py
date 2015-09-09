@@ -134,6 +134,31 @@ def iterate(diff, support, mask, params):
             mod_error.append(mod_err)
             print alg, i, mod_error[-1]
             i += 1
+
+            # output files for viewing if selected
+            if params['output']['every'] is not False :
+                if i % params['output']['every'] == 0 :
+                    if params['recon']['gpu'] :
+                        tpsi = psi.get()
+                        tsupport = support.get()
+                    
+                    # un-shift quadrants
+                    tsupport  = np.fft.fftshift(tsupport)
+                    tpsi      = np.fft.fftshift(tpsi)
+                    
+                    # output
+                    dir = params['output']['dir']
+                    io_utils.binary_out(tpsi, dir + 'psi_'+str(i))
+                    io_utils.binary_out(tsupport, dir + 'support_'+str(i))
+                    io_utils.binary_out(mod_error, dir + 'mod_err_'+str(i))
+
+    if params['recon']['gpu'] :
+        psi = psi.get()
+        support = support.get()
+    
+    # un-shift quadrants
+    support  = np.fft.fftshift(support)
+    psi      = np.fft.fftshift(psi)
      
     return psi, support, mod_error
         

@@ -1,3 +1,7 @@
+import numpy as np
+import sys
+
+
 def parse_parameters(config):
     """
     Parse values from the configuration file and sets internal parameter accordingly
@@ -47,3 +51,45 @@ def parse_parameters(config):
                     pass
 
     return monitor_params
+
+def binary_out(array, fnam, endianness='little', appendType=True, appendDim=True):
+    """Write a n-d array to a binary file."""
+    arrayout = np.array(array)
+    
+    if appendDim == True :
+        fnam_out = fnam + '_'
+        for i in arrayout.shape[:-1] :
+            fnam_out += str(i) + 'x' 
+        fnam_out += str(arrayout.shape[-1]) + '_' + str(arrayout.dtype) + '.bin'
+    else :
+        fnam_out = fnam
+    
+    if sys.byteorder != endianness:
+        arrayout.byteswap(True)
+    
+    arrayout.tofile(fnam_out)
+
+def binary_in(fnam, ny = None, nx = None, dtype = None, endianness='little', dimFnam = True):
+    """Read a n-d array from a binary file."""
+    if dimFnam :
+        # grab the dtype from the '_float64.bin' at the end
+        tstr = fnam[:-4].split('_')[-1]
+        if dtype is None :
+            print tstr
+            dtype = np.dtype(tstr)
+        
+        # get the dimensions from the 'asfasfs_89x12x123_' bit
+        b    = fnam[:fnam.index(tstr)-1].split('_')[-1]
+        dims = b.split('x')
+        dims = np.array(dims, dtype=np.int)
+        dims = tuple(dims)
+        
+        arrayout = np.fromfile(fnam, dtype=dtype).reshape( dims )
+    
+    else :
+        arrayout = np.fromfile(fnam, dtype=dtype).reshape( (ny,nx) )
+    
+    if sys.byteorder != endianness:
+        arrayout.byteswap(True)
+    
+    return arrayout

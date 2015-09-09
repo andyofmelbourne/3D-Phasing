@@ -11,3 +11,4 @@ logs/
 *.png
 *.raw
 *.swp
+*.pyc
