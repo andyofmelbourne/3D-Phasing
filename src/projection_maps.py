@@ -15,26 +15,24 @@ def ERA(psi, support, good_pix, amp):
     psi_sup = psi * support
     psi     = Pmod(amp, psi_sup.copy(), good_pix) 
     
-    delta = psi - psi_sup
-    support_err = np.sum( (delta * np.conj(delta)).real )
-    
-    delta = psi - psi_sup
-    mod_err = np.sum( (delta * np.conj(delta)).real )
-
-    return psi, mod_err, support_err
+    #psi_sup -= psi
+    #mod_err  = np.sum( (psi_sup * psi_sup.conj()).real ) / float(psi.size)
+    mod_err = calc_modulus_err(psi, support, good_pix, amp)
+    return psi, mod_err
 
 
 def DM(psi, support, good_pix, amp):
-    psi_sup = psi * support
+    temp = psi * (2 * support - 1)
 
-    psi += Pmod(amp, 2*psi_sup - psi, good_pix) - psi_sup
+    psi += Pmod(amp, temp, good_pix) - psi * support
     
-    delta       = psi * ~support
-    support_err = np.sum( (delta * np.conj(delta)).real ) 
-    
-    delta       = psi - Pmod(amp, psi, good_pix)
-    mod_err     = np.sum( (delta * np.conj(delta)).real ) 
-    return psi, mod_err, support_err
+    mod_err = calc_modulus_err(psi, support, good_pix, amp)
+    return psi, mod_err
 
-
-
+def calc_modulus_err(psi, support, good_pix, amp):
+    dummy_comp  = psi.copy() * support
+    dummy_comp  = np.fft.fftn(dummy_comp)
+    dummy_real  = dummy_comp.__abs__() - amp 
+    dummy_real *= good_pix
+    mod_err     = np.sum( dummy_real * dummy_real) / float(psi.size)
+    return np.sqrt(mod_err)

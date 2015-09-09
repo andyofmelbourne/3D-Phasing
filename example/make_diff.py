@@ -13,7 +13,7 @@ if __name__ == "__main__":
     config = ConfigParser.ConfigParser()
     config.read(sys.argv[1])
     params = io_utils.parse_parameters(config)
-
+    
     # make the real-space object
     psi = np.zeros((params['cube']['n'], params['cube']['n'], \
                     params['cube']['n']), np.complex128)
@@ -23,11 +23,16 @@ if __name__ == "__main__":
     psi[(psi.shape[0]-s[0])/2 : (psi.shape[0]+s[0])/2, \
         (psi.shape[1]-s[1])/2 : (psi.shape[1]+s[1])/2, \
         (psi.shape[2]-s[2])/2 : (psi.shape[2]+s[2])/2] = 1.0
+
+    # real-space support
+    support = psi.real > 0.
     
     # add noise
     i       = np.where(psi == 1.0) 
     psi[i] += np.random.random((len(i[0]), )) * params['cube']['noise']
-
+    if params['cube']['real'] is False :
+        psi[i] += np.random.random((len(i[0]), )) * params['cube']['noise'] * 1J 
+    
     # make the diffraction data
     diff = np.fft.fftn(psi)
     diff = np.abs(diff)**2
@@ -37,4 +42,5 @@ if __name__ == "__main__":
     shapestr = str(params['cube']['n']) + 'x' + str(params['cube']['n']) + 'x' + str(params['cube']['n']) 
     diff.tofile('diff_example_'+shapestr+'_float64.bin')
     psi.tofile('obj_example_'+shapestr+'_complex128.bin')
+    support.tofile('support_example_'+shapestr+'_bool.bin')
 

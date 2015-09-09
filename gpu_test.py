@@ -6,6 +6,7 @@ import sys
 import ConfigParser
 from utils import io_utils
 
+"""
 #
 # GPU stuff 
 try :
@@ -20,7 +21,6 @@ except :
     GPU_calc = False
     from src.projection_maps import *
 
-shape = (128, 128, 128)
 
 # get the CUDA platform
 platforms = pyopencl.get_platforms()
@@ -39,6 +39,9 @@ queue = pyopencl.CommandQueue(context)
 
 # make a plan for the ffts
 plan = Plan(shape, dtype=np.complex128, queue=queue)
+"""
+
+shape = (128, 128, 128)
 
 psi     = np.random.random(shape) + 1.0J * np.random.random(shape)
 support = np.zeros(shape, dtype=np.int8)
@@ -54,12 +57,14 @@ support = np.fft.ifftshift(support)
 
 good_pix = (np.random.random(shape) > 0.5).astype(np.int8)
 
+"""
 # send it to the gpu
 psi_gpu     = pyopencl.array.to_device(queue, np.ascontiguousarray(psi))
 support_gpu = pyopencl.array.to_device(queue, np.ascontiguousarray(support))
 amp_gpu     = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
 phase_gpu   = pyopencl.array.to_device(queue, np.ascontiguousarray(phase))
 good_pix_gpu  = pyopencl.array.to_device(queue, np.ascontiguousarray(good_pix))
+"""
 
 """
 plan.execute(psi_gpu.data)
@@ -83,9 +88,22 @@ plan.execute(psi_gpu.data, inverse=True)
 """
 
 import src.projection_maps_gpu as pm_gpu
-psi_gpu = pm_gpu.Pmod(amp_gpu, psi_gpu, good_pix_gpu, phase_gpu, plan, queue)
+proj = pm_gpu.Projections(psi.shape, psi.dtype)
+psi_gpu, amp_gpu, support_gpu, good_pix_gpu = proj.send_to_gpu(psi, amp, support, good_pix)
+
+#psi_gpu = proj.Pmod(amp_gpu, psi_gpu, good_pix_gpu)
+print 'performing gpu ERA...'
+for i in range(10):
+    psi_gpu, mod_err_gpu = proj.DM(psi_gpu, support_gpu, good_pix_gpu, amp_gpu)
+    print 'gpu', i, mod_err_gpu
 
 import src.projection_maps as pm
-psi = pm.Pmod(amp, psi, good_pix)
+#psi = pm.Pmod(amp, psi, good_pix)
+print 'performing ERA...'
+for i in range(10):
+    psi, mod_err, sup_err = pm.DM(psi, support, good_pix, amp)
+    print 'cpu', i, mod_err
 
-print '\n comparison with Pmod:', np.sum(np.abs(psi - psi_gpu.get())**2)
+#print '\n comparison with Pmod:', np.sum(np.abs(psi - psi_gpu.get())**2)
+print '\n comparison with ERA', np.sum(np.abs(psi - psi_gpu.get())**2)
+print '\n comparison with mod error', mod_err, mod_err_gpu

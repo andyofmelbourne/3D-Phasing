@@ -6,24 +6,21 @@ import sys
 import ConfigParser
 from utils import io_utils
 
-#
-# GPU stuff 
-try :
-    import pyfft
-    import pyopencl
-    import pyopencl.array
-    from pyfft.cl import Plan
-    GPU_calc = True
-    from src.projection_maps_gpu import *
-except :
-    GPU_calc = False
-    from src.projection_maps import *
-
 
 def read_data(params):
     diff = np.fromfile(params['input']['filename'], dtype = np.dtype(params['input']['dtype']))
     diff = diff.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
-    return diff
+    
+    support = np.fromfile(params['mask']['support'], dtype = np.dtype(params['mask']['support_dtype']))
+    support = support.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
+    
+    if params['mask']['good_pix'] == True :
+        good_pix = np.ones_like(support, dtype=np.bool)
+    else :
+        good_pix = np.fromfile(params['mask']['good_pix'], dtype = np.dtype(params['mask']['good_pix_dtype']))
+        good_pix = good_pix.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
+    
+    return diff, support, good_pix
 
 
 def fit_sphere_to_autoc(diff):
@@ -91,63 +88,54 @@ def iterate(diff, support, mask, params):
     
     # initial guess
     print '\n inital estimate: random numbers b/w 0 and 1 (just real)'
-    support_error, mod_error = [], []
     psi  = np.random.random(amp.shape) + 0J 
     psi *= support
-
-    # send all the arrays to the gpu
-    # we need : psi, support, amp, phase
-    if GPU_calc :
-        # get the CUDA platform
-        platforms = pyopencl.get_platforms()
-        for p in platforms:
-            if p.name == 'NVIDIA CUDA':
-                platform = p
-         
-        # get one of the gpu's device id
-        device = platform.get_devices()[0]
-        
-        # create a context for the device
-        context = pyopencl.Context([device])
-        
-        # create a command queue for the device
-        queue = pyopencl.CommandQueue(context)
-        
-        # make a plan for the ffts
-        plan = Plan(psi.shape, dtype=psi.dtype, queue=queue)
-        
-        # send it to the gpu
-        psi      = pyopencl.array.to_device(queue, psi)
-        support  = pyopencl.array.to_device(queue, support)
-        amp      = pyopencl.array.to_device(queue, amp)
-        phase    = pyopencl.array.to_device(queue, np.zeros_like(amp))
     
     alg   = params['recon']['alg'].split()
     iters = np.array(alg[::2], dtype=np.int)
     algs  = alg[1::2]
+
+    if params['recon']['gpu'] :
+        import src.projection_maps_gpu as pm_gpu
+        import pyopencl.array
+        proj = pm_gpu.Projections(psi.shape, psi.dtype)
+        psi, amp, support, good_pix = proj.send_to_gpu(psi, amp, support, good_pix)
+        print pyopencl.array.sum( psi.__abs__() )
+        
+        ERA = proj.ERA
+        DM  = proj.DM
+    else :
+        import src.projection_maps as pm
+        ERA = pm.ERA
+        DM  = pm.DM
     
-    support_error, mod_error = [], []
+    mod_error = []
     i = 0
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
-                psi, mod_err, support_err = DM(psi, support, good_pix, amp)
+                psi, mod_err = DM(psi, support, good_pix, amp)
                 
             elif alg == 'ERA':
-                psi, mod_err, support_err = ERA(psi, support, good_pix, amp)
+                psi, mod_err = ERA(psi, support, good_pix, amp)
 
             elif alg == 'shrink':
                 print '\n performing shrink wrap:'
-                shrink_mask = shrink(psi * support, thresh=params['shrink']['thresh'], blur=params['shrink']['blur'])
-                print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
-                support = shrink_mask.copy()
+                if params['recon']['gpu'] :
+                    shrink_mask = shrink(psi.get() * support.get(), thresh=params['shrink']['thresh'], blur=params['shrink']['blur'])
+                    print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
+                    support = shrink_mask.copy()
+                    support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
+                else :
+                    shrink_mask = shrink(psi * support, thresh=params['shrink']['thresh'], blur=params['shrink']['blur'])
+                    print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
+                    support = shrink_mask.copy()
                 
-            support_error.append(support_err)
             mod_error.append(mod_err)
-            print alg, i, support_error[-1], mod_error[-1]
+            print alg, i, mod_error[-1]
             i += 1
-    
-    return psi, support, support_error, mod_error
+     
+    return psi, support, mod_error
         
 
 def truncate(diff, n):
@@ -156,68 +144,16 @@ def truncate(diff, n):
     return diff_out
         
 
-def test_gpu_ffts():
-    # get the CUDA platform
-    platforms = pyopencl.get_platforms()
-    for p in platforms:
-        if p.name == 'NVIDIA CUDA':
-            platform = p
-    
-    # get one of the gpu's device id
-    device = platform.get_devices()[0]
-
-    # create a context for the device
-    context = pyopencl.Context([device])
-
-    # create a command queue for the device
-    queue = pyopencl.CommandQueue(context)
-
-    # make a plan for the ffts
-    plan = Plan((128, 128, 128), dtype=np.complex128, queue=queue)
-
-    # make some data to fft on the cpu
-    data = (np.random.random((128,128,128,)) + 0J).astype(np.complex128)
-
-    # send it to the gpu
-    gpu_data = pyopencl.array.to_device(queue, data)
-
-    # do 1000 forward and backward ffts
-    for i in range(1000):
-        print i
-        plan.execute(gpu_data.data)
-        plan.execute(gpu_data.data, inverse=True)
-    
-    # send the data back to the cpu
-    result = gpu_data.get()
-    error = np.abs(np.sum(np.abs(data) - np.abs(result)) / data.size)
-    print error
-
-def test_cpu_ffts():
-    # make some data to fft on the cpu
-    data = (np.random.random((128,128,128,)) + 0J).astype(np.complex128)
-
-    result = data.copy()
-    # do 1000 forward and backward ffts
-    for i in range(1000):
-        print i
-        result = np.fft.fftn(result)
-        result = np.fft.ifftn(result)
-
-    # send the data back to the cpu
-    error = np.abs(np.sum(np.abs(data) - np.abs(result)) / data.size)
-    print error
-
 if __name__ == "__main__":
-
-    #test_gpu_ffts()
-    #test_cpu_ffts()
-
     config = ConfigParser.ConfigParser()
     config.read(sys.argv[1])
     params = io_utils.parse_parameters(config)
     
-    diff = read_data(params)
+    diff, support, good_pix = read_data(params)
     
+    psi, support, mod_error = iterate(diff, support, good_pix, params)
+    
+    """
     if params['mask']['support_rad'] != 0 :
         i, j, k = np.indices(diff.shape)
         r       = (i-diff.shape[0]/2)**2 + (j-diff.shape[1]/2)**2 + (k-diff.shape[2]/2)**2 
@@ -229,5 +165,4 @@ if __name__ == "__main__":
     i, j, k = np.indices(diff.shape)
     r       = (i-diff.shape[0]/2)**2 + (j-diff.shape[1]/2)**2 + (k-diff.shape[2]/2)**2 
     mask    = r > params['mask']['centre_rad']**2
-
-    psi, support, support_error, mod_error = iterate(diff, support, mask, params)
+    """
