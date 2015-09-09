@@ -75,7 +75,6 @@ def binary_in(fnam, ny = None, nx = None, dtype = None, endianness='little', dim
         # grab the dtype from the '_float64.bin' at the end
         tstr = fnam[:-4].split('_')[-1]
         if dtype is None :
-            print tstr
             dtype = np.dtype(tstr)
         
         # get the dimensions from the 'asfasfs_89x12x123_' bit
