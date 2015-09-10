@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+from scipy import ndimage
 import time
 import sys
 import ConfigParser
@@ -11,8 +12,15 @@ def read_data(params):
     diff = np.fromfile(params['input']['filename'], dtype = np.dtype(params['input']['dtype']))
     diff = diff.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
     
-    support = np.fromfile(params['mask']['support'], dtype = np.dtype(params['mask']['support_dtype']))
-    support = support.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
+    if params['mask']['support'] == 'autoc':
+        print '\n thresholding abs(autocorrelation) at', params['shrink']['thresh_init']
+        print   ' to produce the initial sample support'
+        autoc   = np.abs(np.fft.ifftn(diff)) # with **2 ? 
+        autoc   = np.fft.fftshift(autoc)
+        support = autoc > 0.04 * autoc.max()
+    else :
+        support = np.fromfile(params['mask']['support'], dtype = np.dtype(params['mask']['support_dtype']))
+        support = support.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
     
     if params['mask']['good_pix'] == True :
         good_pix = np.ones_like(support, dtype=np.bool)
@@ -27,17 +35,17 @@ def fit_sphere_to_autoc(diff):
     autoc = np.fft.ifftn(diff)
     autoc = np.fft.fftshift(autoc)
     autoc = np.abs(autoc)
-
+    
     norm  = np.sum(autoc)
     norm2 = np.sum(autoc**2)
     
     i, j, k = np.indices(diff.shape)
     r = (i-diff.shape[0]/2)**2 + (j-diff.shape[1]/2)**2 + (k-diff.shape[2]/2)**2 
-
+    
     print '\n finding the least squares fit for the autocorrelation function'
     print   ' of a sphere with the autocorrelation from the diffraction data'
     print '\npixel radius     error'
-
+    
     errs = []
     rads = []
     for rad in range(2, diff.shape[0]/2):
@@ -65,6 +73,30 @@ def shrink(arrayin, thresh, blur):
     mask = threshExpand(mask, 0.5, blur)
     return mask
 
+def shrink_Marchesini(arrayin, index, thresh = 0.2, sigma_0 = 3., sigma_min = 1.5, reduce_by = 0.01):
+    """
+    Follows the procedure in:
+    X-ray image reconstruction from a diffraction pattern alone
+
+    S. Marchesini, H. He, H. N. Chapman, S. P. Hau-Riege, 
+    A. Noy, M. R. Howells, U. Weierstall, and J. C. H. Spence
+    Phys. Rev. B 68, 140101(R) - Published 28 October 2003
+
+    The initial estimate for the support should be given by 
+    autoc   = np.abs(np.fft.ifftn(diff)) # with **2 ? 
+    support = autoc > 0.04 * autoc.max()
+
+    In the paper they update the support every 20 iterations
+    using HIO with beta = 0.9
+    """
+    sigma = (1-reduce_by)**index * sigma_0
+    
+    if sigma < sigma_min :
+        sigma = sigma_min
+    
+    support = ndimage.gaussian_filter(np.abs(arrayin), sigma)
+    support = support > thresh * support.max()
+    return support
 
 def threshExpand(arrayin, thresh=0.1e0, blur=8):
     """Threshold the array then gaussian blur then rethreshold to expand the region.
@@ -94,7 +126,7 @@ def iterate(diff, support, mask, params):
     alg   = params['recon']['alg'].split()
     iters = np.array(alg[::2], dtype=np.int)
     algs  = alg[1::2]
-
+    
     if params['recon']['gpu'] :
         import src.projection_maps_gpu as pm_gpu
         import pyopencl.array
@@ -111,6 +143,7 @@ def iterate(diff, support, mask, params):
     
     mod_error = []
     i = 0
+    shrink_index = 0
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
@@ -118,18 +151,25 @@ def iterate(diff, support, mask, params):
                 
             elif alg == 'ERA':
                 psi, mod_err = ERA(psi, support, good_pix, amp)
-
-            elif alg == 'shrink':
+            
+            if i % params['shrink']['every'] == 0 or alg == 'shrink':
                 print '\n performing shrink wrap:'
                 if params['recon']['gpu'] :
-                    shrink_mask = shrink(psi.get() * support.get(), thresh=params['shrink']['thresh'], blur=params['shrink']['blur'])
+                    shrink_mask = shrink_Marchesini(psi.get(), shrink_index, thresh=params['shrink']['thresh'], \
+                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                            reduce_by=params['shrink']['reduce_by'])
+                    
                     print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
                     support = shrink_mask.copy()
                     support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
                 else :
-                    shrink_mask = shrink(psi * support, thresh=params['shrink']['thresh'], blur=params['shrink']['blur'])
+                    shrink_mask = shrink_Marchesini(psi, shrink_index, thresh=params['shrink']['thresh'], \
+                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                            reduce_by=params['shrink']['reduce_by'])
+                    
                     print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
                     support = shrink_mask.copy()
+                shrink_index += 1
                 
             mod_error.append(mod_err)
             print alg, i, mod_error[-1]

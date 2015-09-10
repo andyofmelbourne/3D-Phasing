@@ -200,55 +200,48 @@ class Application(QtGui.QWidget):
         
         # display the new data (if any) 
         if update :
-            if self.auto :
-                
-                #self.plot_psi.setImage(np.abs(psi))
-                #self.plot_psi.setCurrentIndex(psi.shape[0]/2)
-                data = np.abs(psi)
-                d2 = np.empty(data.shape + (4,), dtype=np.ubyte)
-                d2[..., 0] = 255
-                d2[..., 1] = 100
-                d2[..., 2] = (data.astype(np.float) * (255./data.max())).astype(np.ubyte)
-                d2[..., 3] = ((data/data.max())**2 * 150.).astype(np.ubyte)
-                d2[:, 0, 0] = [255,0,0,100]
-                d2[0, :, 0] = [0,255,0,100]
-                d2[0, 0, :] = [0,0,255,100] 
-                v = gl.GLVolumeItem(d2)
-                v.translate(-data.shape[0]/2,-data.shape[1]/2,-data.shape[2]/2)
-                self.w.addItem(v)
-                ax = gl.GLAxisItem()
-                self.w.addItem(ax)
-                
-                #self.plot_support.setImage(support)
-                #self.plot_support.setCurrentIndex(psi.shape[0]/2)
-                data = support
-                d3 = np.empty(data.shape + (4,), dtype=np.ubyte)
-                d3[..., 0] = 255
-                d3[..., 1] = 100
-                d3[..., 2] = (data.astype(np.float) * (255./data.max())).astype(np.ubyte)
-                d3[..., 3] = ((data.astype(np.float)/data.max())**2 * 150.).astype(np.ubyte)
-                d3[:, 0, 0] = [255,0,0,100]
-                d3[0, :, 0] = [0,255,0,100]
-                d3[0, 0, :] = [0,0,255,100] 
-                v2 = gl.GLVolumeItem(d3)
-                v2.translate(-data.shape[0]/2,-data.shape[1]/2,-data.shape[2]/2)
-                self.w2.addItem(v2)
-                ax2 = gl.GLAxisItem()
-                self.w2.addItem(ax2)
-                
-                self.plot_err.clear()
-                self.plot_err.setTitle('Modulus projection error')
-                self.plot_err.plot(mod_err)
-                self.auto = False
-                
+            if not self.auto :
+                self.w.removeItem(self.v)
+                self.w2.removeItem(self.v2)
             else :
-                self.plot_psi.setImage(np.abs(psi), autoRange = False, autoLevels = False, autoHistogramRange = False)
-                self.plot_psi.setCurrentIndex(psi.shape[0]/2)
-                self.plot_support.setImage(support, autoRange = False, autoLevels = False, autoHistogramRange = False)
-                self.plot_support.setCurrentIndex(psi.shape[0]/2)
-                self.plot_err.clear()
-                self.plot_err.setTitle('Modulus projection error')
-                self.plot_err.plot(mod_err)
+                self.auto = False
+            #self.plot_psi.setImage(np.abs(psi))
+            #self.plot_psi.setCurrentIndex(psi.shape[0]/2)
+            data = np.abs(psi)
+            d2 = np.empty(data.shape + (4,), dtype=np.ubyte)
+            d2[..., 0] = 255
+            d2[..., 1] = 100
+            d2[..., 2] = (data.astype(np.float) * (255./data.max())).astype(np.ubyte)
+            d2[..., 3] = ((data/data.max())**2 * 150.).astype(np.ubyte)
+            d2[:, 0, 0] = [255,0,0,100]
+            d2[0, :, 0] = [0,255,0,100]
+            d2[0, 0, :] = [0,0,255,100] 
+            self.v = gl.GLVolumeItem(d2)
+            self.v.translate(-data.shape[0]/2,-data.shape[1]/2,-data.shape[2]/2)
+            self.w.addItem(self.v)
+            ax = gl.GLAxisItem()
+            self.w.addItem(ax)
+            
+            #self.plot_support.setImage(support)
+            #self.plot_support.setCurrentIndex(psi.shape[0]/2)
+            data = support
+            d3 = np.empty(data.shape + (4,), dtype=np.ubyte)
+            d3[..., 0] = 255
+            d3[..., 1] = 255
+            d3[..., 2] = 255 #(data.astype(np.float) * (255./data.max())).astype(np.ubyte)
+            d3[..., 3] = ((data.astype(np.float)/data.max())**2 * 50.).astype(np.ubyte)
+            d3[:, 0, 0] = [255,0,0,100]
+            d3[0, :, 0] = [0,255,0,100]
+            d3[0, 0, :] = [0,0,255,100] 
+            self.v2 = gl.GLVolumeItem(d3)
+            self.v2.translate(-data.shape[0]/2,-data.shape[1]/2,-data.shape[2]/2)
+            self.w2.addItem(self.v2)
+            ax2 = gl.GLAxisItem()
+            self.w2.addItem(ax2)
+            
+            self.plot_err.clear()
+            self.plot_err.setTitle('Modulus projection error')
+            self.plot_err.plot(mod_err)
 
 
 if __name__ == '__main__':
