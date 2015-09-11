@@ -128,18 +128,32 @@ def iterate(diff, support, mask, params):
     algs  = alg[1::2]
     
     if params['recon']['gpu'] :
+        if amp.dtype == 'float32' :
+            psi = psi.astype(np.complex64)
+        
+        elif amp.dtype == 'float64' :
+            psi = psi.astype(np.complex128)
+        
         import src.projection_maps_gpu as pm_gpu
         import pyopencl.array
+
         proj = pm_gpu.Projections(psi.shape, psi.dtype)
         psi, amp, support, good_pix = proj.send_to_gpu(psi, amp, support, good_pix)
-        print pyopencl.array.sum( psi.__abs__() )
         
         ERA = proj.ERA
-        DM  = proj.DM
+        if params['recon']['beta'] == 1 :
+            DM  = proj.DM
+        else :
+            print '\n beta != 1 using proper DM alg...'
+            DM  = proj.DM_beta
     else :
         import src.projection_maps as pm
         ERA = pm.ERA
-        DM  = pm.DM
+        if params['recon']['beta'] == 1 :
+            DM  = pm.DM
+        else :
+            print '\n beta != 1 using proper DM alg...'
+            DM  = pm.DM_beta
     
     mod_error = []
     i = 0
@@ -147,29 +161,36 @@ def iterate(diff, support, mask, params):
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
-                psi, mod_err = DM(psi, support, good_pix, amp)
+                psi, mod_err = DM(psi, support, good_pix, amp, params['recon']['beta'])
                 
             elif alg == 'ERA':
                 psi, mod_err = ERA(psi, support, good_pix, amp)
             
-            if i % params['shrink']['every'] == 0 or alg == 'shrink':
-                print '\n performing shrink wrap:'
-                if params['recon']['gpu'] :
-                    shrink_mask = shrink_Marchesini(psi.get(), shrink_index, thresh=params['shrink']['thresh'], \
-                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
-                            reduce_by=params['shrink']['reduce_by'])
-                    
-                    print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
-                    support = shrink_mask.copy()
-                    support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
-                else :
-                    shrink_mask = shrink_Marchesini(psi, shrink_index, thresh=params['shrink']['thresh'], \
-                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
-                            reduce_by=params['shrink']['reduce_by'])
-                    
-                    print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
-                    support = shrink_mask.copy()
-                shrink_index += 1
+            if params['shrink']['every'] != False and i > 0 :
+                if i % params['shrink']['every'] == 0 or alg == 'shrink':
+                    print '\n performing shrink wrap:'
+                    if params['recon']['gpu'] :
+                        if alg == 'DM_beta' or alg == 'DM':
+                            temp = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta']).get()
+
+                        shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
+                                sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                                reduce_by=params['shrink']['reduce_by'])
+                        
+                        print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
+                        support = shrink_mask.copy()
+                        support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
+                    else :
+                        if alg == 'DM_beta' or alg == 'DM':
+                            temp = pm.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
+                        
+                        shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
+                                sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                                reduce_by=params['shrink']['reduce_by'])
+                        
+                        print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
+                        support = shrink_mask.copy()
+                    shrink_index += 1
                 
             mod_error.append(mod_err)
             print alg, i, mod_error[-1]
@@ -179,9 +200,18 @@ def iterate(diff, support, mask, params):
             if params['output']['every'] is not False :
                 if i % params['output']['every'] == 0 :
                     if params['recon']['gpu'] :
-                        tpsi = psi.get()
+                        if alg == 'DM_beta' or alg == 'DM':
+                            tpsi = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta']).get()
+                        else :
+                            tpsi = psi.get()
                         tsupport = support.get()
-                    
+                    else :
+                        if alg == 'DM_beta' or alg == 'DM':
+                            tpsi = pm.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
+                        else :
+                            tpsi = psi
+                        tsupport = support.get()
+
                     # un-shift quadrants
                     tsupport  = np.fft.fftshift(tsupport)
                     tpsi      = np.fft.fftshift(tpsi)
@@ -193,8 +223,14 @@ def iterate(diff, support, mask, params):
                     io_utils.binary_out(mod_error, dir + 'mod_err_'+str(i))
 
     if params['recon']['gpu'] :
+        if alg == 'DM_beta' or alg == 'DM':
+            psi = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
+        
         psi = psi.get()
         support = support.get()
+    else :
+        if alg == 'DM_beta' or alg == 'DM':
+            psi = pm.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
     
     # un-shift quadrants
     support  = np.fft.fftshift(support)
