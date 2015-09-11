@@ -128,18 +128,30 @@ def iterate(diff, support, mask, params):
     algs  = alg[1::2]
     
     if params['recon']['gpu'] :
+        if amp.dtype == 'float32' :
+            psi = psi.astype(np.complex64)
+        
+        elif amp.dtype == 'float64' :
+            psi = psi.astype(np.complex128)
+        
         import src.projection_maps_gpu as pm_gpu
         import pyopencl.array
+
         proj = pm_gpu.Projections(psi.shape, psi.dtype)
         psi, amp, support, good_pix = proj.send_to_gpu(psi, amp, support, good_pix)
-        print pyopencl.array.sum( psi.__abs__() )
         
         ERA = proj.ERA
-        DM  = proj.DM
+        if params['recon']['beta'] == 1 :
+            DM  = proj.DM
+        else :
+            DM  = proj.DM_beta
     else :
         import src.projection_maps as pm
         ERA = pm.ERA
-        DM  = pm.DM
+        if params['recon']['beta'] == 1 :
+            DM  = pm.DM
+        else :
+            DM  = pm.DM_beta
     
     mod_error = []
     i = 0
@@ -147,29 +159,30 @@ def iterate(diff, support, mask, params):
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
-                psi, mod_err = DM(psi, support, good_pix, amp)
+                psi, mod_err = DM(psi, support, good_pix, amp, params['recon']['beta'])
                 
             elif alg == 'ERA':
                 psi, mod_err = ERA(psi, support, good_pix, amp)
             
-            if i % params['shrink']['every'] == 0 or alg == 'shrink':
-                print '\n performing shrink wrap:'
-                if params['recon']['gpu'] :
-                    shrink_mask = shrink_Marchesini(psi.get(), shrink_index, thresh=params['shrink']['thresh'], \
-                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
-                            reduce_by=params['shrink']['reduce_by'])
-                    
-                    print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
-                    support = shrink_mask.copy()
-                    support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
-                else :
-                    shrink_mask = shrink_Marchesini(psi, shrink_index, thresh=params['shrink']['thresh'], \
-                            sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
-                            reduce_by=params['shrink']['reduce_by'])
-                    
-                    print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
-                    support = shrink_mask.copy()
-                shrink_index += 1
+            if params['shrink']['every'] != False and i > 0 :
+                if i % params['shrink']['every'] == 0 or alg == 'shrink':
+                    print '\n performing shrink wrap:'
+                    if params['recon']['gpu'] :
+                        shrink_mask = shrink_Marchesini(psi.get(), shrink_index, thresh=params['shrink']['thresh'], \
+                                sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                                reduce_by=params['shrink']['reduce_by'])
+                        
+                        print ' cut', np.sum(support.get()) - np.sum(shrink_mask), 'pixels'
+                        support = shrink_mask.copy()
+                        support = pyopencl.array.to_device(proj.queue, np.ascontiguousarray(support.astype(np.int8)))
+                    else :
+                        shrink_mask = shrink_Marchesini(psi, shrink_index, thresh=params['shrink']['thresh'], \
+                                sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
+                                reduce_by=params['shrink']['reduce_by'])
+                        
+                        print ' cut', np.sum(support) - np.sum(shrink_mask), 'pixels'
+                        support = shrink_mask.copy()
+                    shrink_index += 1
                 
             mod_error.append(mod_err)
             print alg, i, mod_error[-1]
