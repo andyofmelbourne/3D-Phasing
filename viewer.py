@@ -27,6 +27,7 @@ import pyqtgraph.opengl as gl
 psi_fnams     = []
 support_fnams = []
 mod_err_fnams = []
+sup_err_fnams = []
 
 def tryint(s):
     try:
@@ -84,6 +85,10 @@ def fill_current_file_list(directory = './'):
                 mod_err_fnams.append(str(fnam_abs))
                 sort_nicely(mod_err_fnams)
 
+            elif fnam[: 3] == 'sup':
+                sup_err_fnams.append(str(fnam_abs))
+                sort_nicely(sup_err_fnams)
+
 class Application(QtGui.QWidget):
 
     def __init__(self, params):
@@ -101,6 +106,7 @@ class Application(QtGui.QWidget):
         self.current_psi_fnam     = None
         self.current_support_fnam = None
         self.current_mod_err_fnam = None
+        self.current_sup_err_fnam = None
         
         # set-up the gui
         self.refresh_rate = 3000 # milli seconds
@@ -167,7 +173,7 @@ class Application(QtGui.QWidget):
         fill_current_file_list(self.params['output']['dir'])
         
         # set the new data (if any)
-        global psi_fnams, support_fnams, mod_err_fnams
+        global psi_fnams, support_fnams, mod_err_fnams, sup_err_fnams
         if len(psi_fnams) > 0 :
             if psi_fnams[-1] != self.current_psi_fnam :
                 self.current_psi_fnam = psi_fnams[-1]
@@ -197,6 +203,16 @@ class Application(QtGui.QWidget):
                 mod_err = io_utils.binary_in(self.current_mod_err_fnam)
         else :
             self.current_mod_err_fnam = None
+
+        if len(sup_err_fnams) > 0 :
+            if sup_err_fnams[-1] != self.current_sup_err_fnam :
+                self.current_sup_err_fnam = sup_err_fnams[-1]
+                update = True
+
+                # load the new mod_err
+                sup_err = io_utils.binary_in(self.current_sup_err_fnam)
+        else :
+            self.current_sup_err_fnam = None
         
         # display the new data (if any) 
         if update :
@@ -212,7 +228,7 @@ class Application(QtGui.QWidget):
             d2[..., 0] = 255
             d2[..., 1] = 100
             d2[..., 2] = (data.astype(np.float) * (255./data.max())).astype(np.ubyte)
-            d2[..., 3] = ((data/data.max())**2 * 150.).astype(np.ubyte)
+            d2[..., 3] = ((data/data.max())**2 * 255.).astype(np.ubyte)
             d2[:, 0, 0] = [255,0,0,100]
             d2[0, :, 0] = [0,255,0,100]
             d2[0, 0, :] = [0,0,255,100] 
@@ -240,8 +256,9 @@ class Application(QtGui.QWidget):
             self.w2.addItem(ax2)
             
             self.plot_err.clear()
-            self.plot_err.setTitle('Modulus projection error')
+            self.plot_err.setTitle('Modulus + support (red) projection error')
             self.plot_err.plot(mod_err)
+            self.plot_err.plot(sup_err, pen = (100, 0, 0))
 
 
 if __name__ == '__main__':
