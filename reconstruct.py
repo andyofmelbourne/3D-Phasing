@@ -172,6 +172,8 @@ def iterate(diff, support, mask, params):
                     if params['recon']['gpu'] :
                         if alg == 'DM_beta' or alg == 'DM':
                             temp = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta']).get()
+                        else : 
+                            temp = support.get() * psi.get()
 
                         shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
                                 sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
@@ -183,6 +185,8 @@ def iterate(diff, support, mask, params):
                     else :
                         if alg == 'DM_beta' or alg == 'DM':
                             temp = pm.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
+                        else : 
+                            temp = support * psi
                         
                         shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
                                 sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \

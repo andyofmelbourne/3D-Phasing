@@ -212,7 +212,7 @@ class Application(QtGui.QWidget):
             d2[..., 0] = 255
             d2[..., 1] = 100
             d2[..., 2] = (data.astype(np.float) * (255./data.max())).astype(np.ubyte)
-            d2[..., 3] = ((data/data.max())**2 * 150.).astype(np.ubyte)
+            d2[..., 3] = ((data/data.max())**2 * 255.).astype(np.ubyte)
             d2[:, 0, 0] = [255,0,0,100]
             d2[0, :, 0] = [0,255,0,100]
             d2[0, 0, :] = [0,0,255,100] 
