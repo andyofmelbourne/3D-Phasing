@@ -63,7 +63,8 @@ class Projections():
         psi = self.Pmod(amp, psi, good_pix) 
         
         mod_err = self.calc_modulus_err(psi, support, good_pix, amp)
-        return psi, mod_err
+        sup_err = self.calc_support_err(psi, support)
+        return psi, mod_err, sup_err
     
     def DM(self, psi, support, good_pix, amp, beta):
         if beta != 1 :
@@ -77,7 +78,8 @@ class Projections():
         psi += self.Pmod(amp, self.dummy_comp, good_pix) - psi * support
         
         mod_err = self.calc_modulus_err(psi, support, good_pix, amp)
-        return psi, mod_err
+        sup_err = self.calc_support_err(psi, support)
+        return psi, mod_err, sup_err
 
     def DM_beta(self, psi, support, good_pix, amp, beta):
         """
@@ -93,9 +95,12 @@ class Projections():
         self.dummy_comp2 = self.Pmod(amp, self.dummy_comp2, good_pix)
         psi  -= np.float32(beta * (1. - 1. / beta)) * self.dummy_comp2
 
-        self.dummy_comp = self.DM_to_sol(psi, support, good_pix, amp, beta)
-        mod_err = self.calc_modulus_err(self.dummy_comp, support, good_pix, amp)
-        return psi, mod_err
+        self.dummy_comp2 = self.DM_to_sol(psi, support, good_pix, amp, beta)
+        mod_err = self.calc_modulus_err(self.dummy_comp2, support, good_pix, amp)
+
+        self.dummy_comp2  = self.Pmod(amp, self.dummy_comp2, good_pix)
+        sup_err = self.calc_support_err(self.dummy_comp2, support)
+        return psi, mod_err, sup_err
 
     def DM_to_sol(self, psi, support, good_pix, amp, beta):
         self.dummy_comp = psi.copy(queue = self.queue)
@@ -104,6 +109,16 @@ class Projections():
         self.dummy_comp = self.dummy_comp * support
         return self.dummy_comp
     
+    def calc_support_err(self, psi, support):
+        self.dummy_comp  = psi.copy(queue = self.queue) 
+        self.dummy_comp *= support
+        self.dummy_comp -= psi
+        self.dummy_comp  = self.dummy_comp * self.dummy_comp.conj()
+        self.dummy_real  = self.dummy_comp.real
+        
+        sup_err = pyopencl.array.sum( self.dummy_real , queue = self.queue ) / float(psi.size)
+        return np.sqrt(sup_err.get())
+
     def calc_modulus_err(self, psi, support, good_pix, amp):
         self.dummy_comp  = psi.copy(queue = self.queue) 
         self.dummy_comp *= support

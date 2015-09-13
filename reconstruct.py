@@ -17,7 +17,7 @@ def read_data(params):
         print   ' to produce the initial sample support'
         autoc   = np.abs(np.fft.ifftn(diff)) # with **2 ? 
         autoc   = np.fft.fftshift(autoc)
-        support = autoc > 0.04 * autoc.max()
+        support = autoc > params['shrink']['thresh_init'] * autoc.max()
     else :
         support = np.fromfile(params['mask']['support'], dtype = np.dtype(params['mask']['support_dtype']))
         support = support.reshape((params['input']['i'], params['input']['j'], params['input']['k']))
@@ -155,16 +155,16 @@ def iterate(diff, support, mask, params):
             print '\n beta != 1 using proper DM alg...'
             DM  = pm.DM_beta
     
-    mod_error = []
+    mod_error, sup_error = [], []
     i = 0
     shrink_index = 0
     for it, alg in zip(iters, algs):
         for j in range(it):
             if alg == 'DM' :
-                psi, mod_err = DM(psi, support, good_pix, amp, params['recon']['beta'])
+                psi, mod_err, sup_err = DM(psi, support, good_pix, amp, params['recon']['beta'])
                 
             elif alg == 'ERA':
-                psi, mod_err = ERA(psi, support, good_pix, amp)
+                psi, mod_err, sup_err = ERA(psi, support, good_pix, amp)
             
             if params['shrink']['every'] != False and i > 0 :
                 if i % params['shrink']['every'] == 0 or alg == 'shrink':
@@ -197,9 +197,10 @@ def iterate(diff, support, mask, params):
                     shrink_index += 1
                 
             mod_error.append(mod_err)
-            print alg, i, mod_error[-1]
+            sup_error.append(sup_err)
+            print alg, i, mod_error[-1], sup_error[-1]
             i += 1
-
+            
             # output files for viewing if selected
             if params['output']['every'] is not False :
                 if i % params['output']['every'] == 0 :
@@ -225,6 +226,7 @@ def iterate(diff, support, mask, params):
                     io_utils.binary_out(tpsi, dir + 'psi_'+str(i))
                     io_utils.binary_out(tsupport, dir + 'support_'+str(i))
                     io_utils.binary_out(mod_error, dir + 'mod_err_'+str(i))
+                    io_utils.binary_out(sup_error, dir + 'sup_err_'+str(i))
 
     if params['recon']['gpu'] :
         if alg == 'DM_beta' or alg == 'DM':
@@ -240,7 +242,7 @@ def iterate(diff, support, mask, params):
     support  = np.fft.fftshift(support)
     psi      = np.fft.fftshift(psi)
      
-    return psi, support, mod_error
+    return psi, support, mod_error, sup_error
         
 
 def truncate(diff, n):
@@ -256,7 +258,7 @@ if __name__ == "__main__":
     
     diff, support, good_pix = read_data(params)
     
-    psi, support, mod_error = iterate(diff, support, good_pix, params)
+    psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
     
     """
     if params['mask']['support_rad'] != 0 :
