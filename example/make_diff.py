@@ -40,7 +40,14 @@ if __name__ == "__main__":
     
     # output
     shapestr = str(params['cube']['n']) + 'x' + str(params['cube']['n']) + 'x' + str(params['cube']['n']) 
-    diff.tofile('diff_example_'+shapestr+'_float64.bin')
-    psi.tofile('obj_example_'+shapestr+'_complex128.bin')
-    support.tofile('support_example_'+shapestr+'_bool.bin')
+
+    if params['cube']['dtype'] == 'float64':
+        diff.tofile('diff_example_'+shapestr+'_float64.bin')
+        psi.tofile('obj_example_'+shapestr+'_complex128.bin')
+        support.tofile('support_example_'+shapestr+'_bool.bin')
+        
+    elif params['cube']['dtype'] == 'float32':
+        diff.astype(np.float32).tofile('diff_example_'+shapestr+'_float32.bin')
+        psi.astype(np.complex64).tofile('obj_example_'+shapestr+'_complex64.bin')
+        support.tofile('support_example_'+shapestr+'_bool.bin')
 
