@@ -104,9 +104,14 @@ class Projections():
 
     def DM_to_sol(self, psi, support, good_pix, amp, beta):
         self.dummy_comp = psi.copy(queue = self.queue)
+        self.dummy_comp = np.float32(1. - 1./beta) * support * self.dummy_comp + 1./beta * psi
+        self.dummy_comp = self.Pmod(amp, self.dummy_comp, good_pix)
+        """
+        self.dummy_comp = psi.copy(queue = self.queue)
         self.dummy_comp = self.Pmod(amp, self.dummy_comp, good_pix)
         self.dummy_comp = (1. + 1./beta) * self.dummy_comp - 1./beta * psi
         self.dummy_comp = self.dummy_comp * support
+        """
         return self.dummy_comp
     
     def calc_support_err(self, psi, support):

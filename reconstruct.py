@@ -6,6 +6,7 @@ import time
 import sys
 import ConfigParser
 from utils import io_utils
+import subprocess
 
 
 def read_data(params):
@@ -166,14 +167,14 @@ def iterate(diff, support, mask, params):
             elif alg == 'ERA':
                 psi, mod_err, sup_err = ERA(psi, support, good_pix, amp)
             
-            if params['shrink']['every'] != False and i > 0 :
+            if params['shrink']['every'] != False and i > 0 and params['shrink']['stop'] > i:
                 if i % params['shrink']['every'] == 0 or alg == 'shrink':
                     print '\n performing shrink wrap:'
                     if params['recon']['gpu'] :
                         if alg == 'DM_beta' or alg == 'DM':
                             temp = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta']).get()
                         else : 
-                            temp = support.get() * psi.get()
+                            temp = psi.get()
 
                         shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
                                 sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
@@ -186,7 +187,7 @@ def iterate(diff, support, mask, params):
                         if alg == 'DM_beta' or alg == 'DM':
                             temp = pm.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
                         else : 
-                            temp = support * psi
+                            temp = psi
                         
                         shrink_mask = shrink_Marchesini(temp, shrink_index, thresh=params['shrink']['thresh'], \
                                 sigma_0=params['shrink']['sigma_0'], sigma_min=params['shrink']['sigma_min'], \
@@ -258,18 +259,19 @@ if __name__ == "__main__":
     
     diff, support, good_pix = read_data(params)
     
-    psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
-    
-    """
-    if params['mask']['support_rad'] != 0 :
-        i, j, k = np.indices(diff.shape)
-        r       = (i-diff.shape[0]/2)**2 + (j-diff.shape[1]/2)**2 + (k-diff.shape[2]/2)**2 
-        support = r < params['mask']['support_rad']**2
-    else :
-        support = fit_sphere_to_autoc(diff)
+    for i in range(20):
+        psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
 
-    # mask is "good", so good_diff_pixels = diff * mask
-    i, j, k = np.indices(diff.shape)
-    r       = (i-diff.shape[0]/2)**2 + (j-diff.shape[1]/2)**2 + (k-diff.shape[2]/2)**2 
-    mask    = r > params['mask']['centre_rad']**2
-    """
+        # output
+        dir = params['output']['dir_iters']
+        io_utils.binary_out(psi, dir + 'psi_'+str(i))
+        io_utils.binary_out(support, dir + 'support_'+str(i))
+        io_utils.binary_out(mod_error, dir + 'mod_err_'+str(i))
+        io_utils.binary_out(sup_error, dir + 'sup_err_'+str(i))
+        
+        bashCommand = 'rm ' +  os.path.abspath(params['output']['dir']) + '*.bin'
+        process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
+        output  = process.communicate()[0]
+        print bashCommand
+        print output
+
