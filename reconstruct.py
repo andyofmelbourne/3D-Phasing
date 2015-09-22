@@ -3,9 +3,10 @@
 import numpy as np
 from scipy import ndimage
 import time
-import sys
+import sys, os
 import ConfigParser
 from utils import io_utils
+import utils.remove_files
 import subprocess
 
 
@@ -259,7 +260,8 @@ if __name__ == "__main__":
     
     diff, support, good_pix = read_data(params)
     
-    for i in range(20):
+    repeats = 4
+    for i in range(repeats):
         psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
 
         # output
@@ -269,9 +271,25 @@ if __name__ == "__main__":
         io_utils.binary_out(mod_error, dir + 'mod_err_'+str(i))
         io_utils.binary_out(sup_error, dir + 'sup_err_'+str(i))
         
-        bashCommand = 'rm ' +  os.path.abspath(params['output']['dir']) + '*.bin'
-        process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
-        output  = process.communicate()[0]
-        print bashCommand
-        print output
+	utils.remove_files.remove_files(os.path.abspath(params['output']['dir']))
 
+    # load and average the reconstructions
+    # this probably only makes sense when using a real support
+    psi.fill(0)
+    mod_error = np.array(mod_error) * 0
+    sup_error = np.array(sup_error) * 0
+    for i in range(repeats):
+        psi       += io_utils.binary_in(dir + 'psi_'+str(i)+'_'+str(psi.shape[0])+'x'+str(psi.shape[1])+'x'+str(psi.shape[2])+'_'+str(psi.dtype)+'.bin')
+        mod_error += io_utils.binary_in(dir + 'mod_err_'+str(i)+'_'+str(mod_error.shape[0])+'_'+str(mod_error.dtype)+'.bin')
+        sup_error += io_utils.binary_in(dir + 'sup_err_'+str(i)+'_'+str(sup_error.shape[0])+'_'+str(sup_error.dtype)+'.bin')
+    
+    psi       = psi / float(repeats)
+    mod_error = mod_error / float(repeats)
+    sup_error = sup_error / float(repeats)
+
+    # output
+    dir = params['output']['dir_final']
+    io_utils.binary_out(psi, dir + 'psi')
+    io_utils.binary_out(support, dir + 'support')
+    io_utils.binary_out(mod_error, dir + 'mod_err')
+    io_utils.binary_out(sup_error, dir + 'sup_err')
