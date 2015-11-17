@@ -31,7 +31,7 @@ class Projections():
         # make a plan for the ffts
         self.plan = Plan(shape, dtype=dtype, queue=self.queue)
 
-    def send_to_gpu(self, psi, amp, support, good_pix):
+    def send_to_gpu(self, psi, amp, support, good_pix, conv=False):
         print psi.dtype, amp.dtype, np.zeros_like(psi).dtype
         print float(3*psi.nbytes + 2*support.astype(np.int8).nbytes + 2*amp.nbytes) / 1024**3
         # send it to the gpu
@@ -40,13 +40,44 @@ class Projections():
         amp_gpu      = pyopencl.array.to_device(self.queue, np.ascontiguousarray(amp))
         good_pix_gpu = pyopencl.array.to_device(self.queue, np.ascontiguousarray(good_pix.astype(np.int8)))
 
+        if conv is not False :
+            self.conv_gpu  = pyopencl.array.to_device(self.queue, np.ascontiguousarray(conv).astype(amp.dtype))
+            self.Pmod      = self._Pmod_conv
+
+            self.d_psi  = pyopencl.array.to_device(self.queue, np.ascontiguousarray(np.zeros_like(psi)))
+            # make a plan for the ffts
+            #self.plan_d = Plan(psi.shape, dtype=psi.dtype, queue=self.queue)
+            
+        else :
+            self.Pmod = self._Pmod
+        
         # send dummy arrays to the gpu
         self.dummy_real  = pyopencl.array.to_device(self.queue, np.ascontiguousarray(np.zeros_like(amp)))
         self.dummy_comp  = pyopencl.array.to_device(self.queue, np.ascontiguousarray(np.zeros_like(psi)))
         self.dummy_comp2 = pyopencl.array.to_device(self.queue, np.ascontiguousarray(np.zeros_like(psi)))
         return psi_gpu, amp_gpu, support_gpu, good_pix_gpu
 
-    def Pmod(self, amp, psi, good_pix):
+    def _Pmod_conv(self, amp, psi, good_pix):
+        self.plan.execute(psi.data)
+        
+        # convolve predicted intensity with self.conv_gpu
+        self.d_psi = (psi.real**2 + psi.imag**2).astype(psi.dtype) 
+        self.plan.execute(self.d_psi.data)
+
+        self.d_psi *= self.conv_gpu
+        self.plan.execute(self.d_psi.data, inverse=True)
+        
+        self.dummy_real = amp / (abs(self.d_psi)**0.5 + 1.0e-5)
+        #self.dummy_real = amp / (abs(psi)+1.0e-10)
+        
+        self.d_psi = psi * (1 - good_pix)
+
+        psi   = self.d_psi + psi * self.dummy_real * good_pix
+        
+        self.plan.execute(psi.data, inverse=True)
+        return psi
+
+    def _Pmod(self, amp, psi, good_pix):
         self.plan.execute(psi.data)
 
         self.dummy_real = pyopencl.clmath.atan2(psi.imag, psi.real, queue=self.queue)
@@ -59,7 +90,7 @@ class Projections():
         return psi
     
     def ERA(self, psi, support, good_pix, amp):
-        psi = psi * support
+        psi = (psi.real * support).astype(psi.dtype)
         psi = self.Pmod(amp, psi, good_pix) 
         
         mod_err = self.calc_modulus_err(psi, support, good_pix, amp)
@@ -73,9 +104,11 @@ class Projections():
 
         #print pyopencl.array.sum( psi.__abs__() )
         
-        self.dummy_comp = psi * (2 * support - 1)
+        #self.dummy_comp = psi * (2 * support - 1)
+        self.dummy_comp  = (2 * psi.real * support).astype(psi.dtype)
+        self.dummy_comp -= psi
         
-        psi += self.Pmod(amp, self.dummy_comp, good_pix) - psi * support
+        psi += self.Pmod(amp, self.dummy_comp, good_pix) - (psi * support).astype(psi.dtype)
         
         mod_err = self.calc_modulus_err(psi, support, good_pix, amp)
         sup_err = self.calc_support_err(psi, support)
@@ -89,9 +122,9 @@ class Projections():
         """
         self.dummy_comp  = psi.copy(queue = self.queue)
         self.dummy_comp  = self.Pmod(amp, self.dummy_comp, good_pix)
-        self.dummy_comp2 = support * psi 
+        self.dummy_comp2 = (support * psi.real).astype(psi.dtype)
         psi  -= self.dummy_comp + self.dummy_comp2
-        psi  += np.float32(beta * (1. + 1. / beta)) * support * self.dummy_comp
+        psi  += (np.float32(beta * (1. + 1. / beta)) * support * self.dummy_comp.real).astype(psi.dtype)
         self.dummy_comp2 = self.Pmod(amp, self.dummy_comp2, good_pix)
         psi  -= np.float32(beta * (1. - 1. / beta)) * self.dummy_comp2
 
@@ -104,7 +137,8 @@ class Projections():
 
     def DM_to_sol(self, psi, support, good_pix, amp, beta):
         self.dummy_comp = psi.copy(queue = self.queue)
-        self.dummy_comp = np.float32(1. - 1./beta) * support * self.dummy_comp + 1./beta * psi
+        self.dummy_comp = (np.float32(1. - 1./beta) * support * self.dummy_comp.real).astype(psi.dtype) \
+                          + 1./beta * psi
         self.dummy_comp = self.Pmod(amp, self.dummy_comp, good_pix)
         """
         self.dummy_comp = psi.copy(queue = self.queue)
@@ -115,7 +149,7 @@ class Projections():
         return self.dummy_comp
     
     def calc_support_err(self, psi, support):
-        self.dummy_comp  = psi.copy(queue = self.queue) 
+        self.dummy_comp  = (psi.copy(queue = self.queue).real).astype(psi.dtype)
         self.dummy_comp *= support
         self.dummy_comp -= psi
         self.dummy_comp  = self.dummy_comp * self.dummy_comp.conj()
@@ -125,7 +159,7 @@ class Projections():
         return np.sqrt(sup_err.get())
 
     def calc_modulus_err(self, psi, support, good_pix, amp):
-        self.dummy_comp  = psi.copy(queue = self.queue) 
+        self.dummy_comp  = (psi.copy(queue = self.queue).real).astype(psi.dtype)
         self.dummy_comp *= support
         self.plan.execute(self.dummy_comp.data) 
         self.dummy_real  = self.dummy_comp.__abs__() - amp 

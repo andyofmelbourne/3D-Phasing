@@ -2,7 +2,6 @@ import numpy as np
 
 def rad_av(diff, rs = None):
     if rs is None :
-        # un-bin them
         i = np.arange(diff.shape[0]) - diff.shape[0] / 2
         j = np.arange(diff.shape[1]) - diff.shape[1] / 2
         k = np.arange(diff.shape[2]) - diff.shape[2] / 2

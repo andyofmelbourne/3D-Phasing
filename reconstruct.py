@@ -6,6 +6,7 @@ import time
 import sys, os
 import ConfigParser
 from utils import io_utils
+from utils import zero_pad
 import utils.remove_files
 import subprocess
 
@@ -114,16 +115,20 @@ def threshExpand(arrayin, thresh=0.1e0, blur=8):
     return arrayout
 
 
-def iterate(diff, support, mask, params):
+def iterate(diff, support, mask, params, psi = None):
     # shift quadrants for faster iters
     good_pix = np.fft.ifftshift(mask)
     amp      = np.sqrt(np.fft.ifftshift(diff))
     support  = np.fft.ifftshift(support)
     
     # initial guess
-    print '\n inital estimate: random numbers b/w 0 and 1 (just real)'
-    psi  = np.random.random(amp.shape) + 0J 
-    psi *= support
+    if psi is None :
+        print '\n inital estimate: random numbers b/w 0 and 1 (just real)'
+        psi  = np.random.random(amp.shape) + 0J 
+        psi *= support
+    else :
+        print '\n keeping the provided psi'
+        psi = np.fft.ifftshift(psi)
     
     alg   = params['recon']['alg'].split()
     iters = np.array(alg[::2], dtype=np.int)
@@ -140,7 +145,14 @@ def iterate(diff, support, mask, params):
         import pyopencl.array
 
         proj = pm_gpu.Projections(psi.shape, psi.dtype)
-        psi, amp, support, good_pix = proj.send_to_gpu(psi, amp, support, good_pix)
+
+        conv = False
+        if params['recon'].has_key('sigma') :
+            if params['recon']['sigma'] is not False :
+                conv = zero_pad.mk_Fgaus(psi.shape, params['recon']['sigma'])
+                conv = np.fft.ifftshift(conv)
+
+        psi, amp, support, good_pix = proj.send_to_gpu(psi, amp, support, good_pix, conv)
         
         ERA = proj.ERA
         if params['recon']['beta'] == 1 :
@@ -234,7 +246,7 @@ def iterate(diff, support, mask, params):
         if alg == 'DM_beta' or alg == 'DM':
             psi = proj.DM_to_sol(psi, support, good_pix, amp, params['recon']['beta'])
         
-        psi = psi.get()
+        psi     = psi.get()
         support = support.get()
     else :
         if alg == 'DM_beta' or alg == 'DM':
@@ -260,9 +272,17 @@ if __name__ == "__main__":
     
     diff, support, good_pix = read_data(params)
     
-    repeats = 4
-    for i in range(repeats):
-        psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
+    psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params)
+
+    params['recon']['alg']    = params['recon']['repeats'] * '50 DM 50 ERA '
+    params['output']['every'] = 100
+    params['output']['dir']   = params['output']['dir_iters']
+    params['shrink']['every'] = False
+    psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params, psi)
+
+    """
+    for i in range(params['recon']['repeats']):
+        psi, support, mod_error, sup_error = iterate(diff, support, good_pix, params, psi)
 
         # output
         dir = params['output']['dir_iters']
@@ -273,6 +293,12 @@ if __name__ == "__main__":
         
 	utils.remove_files.remove_files(os.path.abspath(params['output']['dir']))
 
+        #if i > 0 :
+        #    params['shrink']['every'] = False
+    """
+            
+
+    """
     # load and average the reconstructions
     # this probably only makes sense when using a real support
     psi.fill(0)
@@ -293,3 +319,4 @@ if __name__ == "__main__":
     io_utils.binary_out(support, dir + 'support')
     io_utils.binary_out(mod_error, dir + 'mod_err')
     io_utils.binary_out(sup_error, dir + 'sup_err')
+    """
