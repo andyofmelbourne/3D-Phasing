@@ -12,3 +12,4 @@ logs/
 *.raw
 *.swp
 *.pyc
+*.h5

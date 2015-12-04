@@ -18,3 +18,18 @@ def expand_region_by(mask, frac):
                 return (mask_out > thresh)
 
         # we did not find a good candidate 
+
+
+def shrinkwrap(sample, start_pix, stop_pix, steps, step):
+    from scipy.special import erfc
+    
+    x   = float(step)/float(steps-1)
+    pix = (start_pix - stop_pix) * erfc(4*x - 2)/2. + stop_pix
+    
+    # find the 'pix' highest pixel values in the sample
+    value = np.percentile(np.abs(sample), 100. * (1. - pix / float(sample.size)))
+     
+    support = np.zeros(sample.shape, dtype=np.bool)
+    
+    support[np.where(np.abs(sample) > value)] = True
+    return support

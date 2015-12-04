@@ -64,9 +64,20 @@ class Application():
         duck_plots = (np.sum(solid_unit_ret, axis=0),\
                       np.sum(solid_unit_ret, axis=1),\
                       np.sum(solid_unit_ret, axis=2))
-
         duck_plots = np.hstack(duck_plots)
+
+        support_ret   = np.fft.ifftshift(support_ret)
+        support_plots = (np.sum(support_ret, axis=0),\
+                         np.sum(support_ret, axis=1),\
+                         np.sum(support_ret, axis=2))
+        support_plots = np.hstack(support_plots)
+
         
+        diff_ret_plots = np.hstack((np.fft.ifftshift(diff_ret[0, :, :]), \
+                                np.fft.ifftshift(diff_ret[:, 0, :]), \
+                                np.fft.ifftshift(diff_ret[:, :, 0])))
+        diff_ret_plots = diff_ret_plots**0.2
+
         diff_plots = np.hstack((np.fft.ifftshift(diff[0, :, :]), \
                                 np.fft.ifftshift(diff[:, 0, :]), \
                                 np.fft.ifftshift(diff[:, :, 0])))
@@ -81,8 +92,14 @@ class Application():
         # 2D projection images for the sample
         self.duck_plots = pg.ImageView()
 
+        # 2D projection images for the sample support
+        self.support_plots = pg.ImageView()
+
         # 2D slices for the diffraction volume
         self.diff_plots = pg.ImageView()
+
+        # 2D slices for the retrieved diffraction volume
+        self.diff_ret_plots = pg.ImageView()
 
         # line plots of the error metrics
         self.plot_emod = pg.PlotWidget()
@@ -91,11 +108,17 @@ class Application():
         Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
 
         # ducks
-        Vsplitter.addWidget(self.duck_plots)
+        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter.addWidget(self.duck_plots)
+        Hsplitter.addWidget(self.support_plots)
+        Vsplitter.addWidget(Hsplitter)
         
         # diffs
-        Vsplitter.addWidget(self.diff_plots)
-        
+        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter.addWidget(self.diff_plots)
+        Hsplitter.addWidget(self.diff_ret_plots)
+        Vsplitter.addWidget(Hsplitter)
+
         # errors
         Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
         Hsplitter.addWidget(self.plot_emod)
@@ -108,7 +131,9 @@ class Application():
         w.setLayout(hlayout_tot)
 
         self.duck_plots.setImage(duck_plots.T)
+        self.support_plots.setImage(support_plots.T)
         self.diff_plots.setImage(diff_plots.T)
+        self.diff_ret_plots.setImage(diff_ret_plots.T)
         self.plot_emod.plot(emod)
         self.plot_emod.setTitle('Modulus error l2norm:')
         self.plot_efid.plot(efid)

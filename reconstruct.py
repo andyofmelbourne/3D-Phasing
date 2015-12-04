@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 import time
-import sys
+import sys, os
 import ConfigParser
+import subprocess
 
 sys.path.append('.')
 from utils import io_utils
@@ -23,10 +24,10 @@ if __name__ == "__main__":
         
         # write to file
         io_utils.write_input_h5(params['output']['path'], diff, support, \
-                beamstop + edges, solid_unit, args.config)
+                beamstop * edges, solid_unit, args.config)
     
     # inverse problem
-    #runstr = "python " + params['phasing']['script'] + ' ' + \
-    #                 os.path.join(params['output']['path'],'input.h5')
-    #print '\n',runstr
-    #subprocess.call([runstr], shell=True)
+    runstr = "python " + params['phasing']['script'] + ' ' + \
+                     os.path.join(params['output']['path'],'input.h5')
+    print '\n',runstr
+    subprocess.call([runstr], shell=True)

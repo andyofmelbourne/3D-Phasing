@@ -54,12 +54,14 @@ def DM_beta(psi, support, good_pix, amp, beta):
     sup_err = calc_support_err(psi_M, support)
     return psi, mod_err, sup_err
 
+
 def DM_to_sol(psi, support, good_pix, amp, beta):
     psi_M = psi.copy()
     psi_M = Pmod(amp, psi_M, good_pix)
     psi_M = (1. + 1./beta) * psi_M - 1./beta * psi
     psi_M = psi_M * support
     return psi_M
+
 
 def calc_support_err(psi, support):
     dummy_comp  = psi.copy()
@@ -70,6 +72,7 @@ def calc_support_err(psi, support):
     
     sup_err = np.sum(dummy_real) / float(psi.size)
     return np.sqrt(sup_err)
+
 
 def calc_modulus_err(psi, support, good_pix, amp):
     dummy_comp  = psi.copy() * support

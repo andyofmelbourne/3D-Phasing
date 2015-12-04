@@ -52,7 +52,7 @@ def add_noise_3d(diff, n, is_fft_shifted = True, remove_courners = True, unit_ce
     # at the edge of the detector
     if unit_cell_size is not None :
         # ratio of diff vol to unit_cell vol
-        over_sampling = float(diff.size) / float(unit_cell_size[0]*unit_cell_size[1]*unit_cell_size[2]) 
+        over_sampling = float(diff.size) / float(unit_cell_size**3) 
     else :
         over_sampling = 2.
 

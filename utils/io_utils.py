@@ -72,6 +72,16 @@ def parse_parameters(config):
     return monitor_params
 
 
+def parse_cmdline_args_phasing():
+    import argparse
+    import os
+    parser = argparse.ArgumentParser(prog = 'phase.py', description='phase a merged 3D diffraction volume')
+    parser.add_argument('input', type=str, \
+                        help="h5 file name of the input file")
+    args = parser.parse_args()
+    return args
+
+
 def write_output_h5(path, diff, diff_ret, support, support_ret, \
         good_pix, solid_unit, solid_unit_ret, emod, efid):
     import os, h5py
@@ -86,8 +96,8 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
     f.create_dataset('good pixels', data = good_pix.astype(np.int16))
     f.create_dataset('modulus error', data = emod)
     f.create_dataset('fidelity error', data = efid)
-    f.create_dataset('solid unit init', data = solid_unit)
-    f.create_dataset('solid unit retrieved', data = solid_unit_ret)
+    f.create_dataset('sample init', data = solid_unit)
+    f.create_dataset('sample retrieved', data = solid_unit_ret)
 
     # read the config file and dump it into the h5 file
     """
@@ -111,8 +121,8 @@ def read_output_h5(path):
     good_pix       = f['good pixels'].value.astype(np.bool)
     emod           = f['modulus error'].value
     efid           = f['fidelity error'].value
-    solid_unit     = f['solid unit init'].value
-    solid_unit_ret = f['solid unit retrieved'].value
+    solid_unit     = f['sample init'].value
+    solid_unit_ret = f['sample retrieved'].value
     #config_file    = f['config file'].value
 
     f.close()
