@@ -64,7 +64,7 @@ class Application():
         duck_plots = (np.sum(solid_unit_ret, axis=0),\
                       np.sum(solid_unit_ret, axis=1),\
                       np.sum(solid_unit_ret, axis=2))
-        duck_plots = np.hstack(duck_plots)
+        duck_plots = np.hstack(np.abs(duck_plots))
 
         support_ret   = np.fft.ifftshift(support_ret)
         support_plots = (np.sum(support_ret, axis=0),\
