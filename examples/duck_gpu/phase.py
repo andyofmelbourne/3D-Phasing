@@ -45,10 +45,10 @@ def phase(I, support, params, good_pix = None, sample_known = None):
 
     emod      = []
     index     = 0
-    index_max = params['phasing']['outerloop'] * (params['phasing']['hio'] + params['phasing']['era']) + params['phasing']['era_final']
-    print params['phasing']['outerloop'] , params['phasing']['hio'] , params['phasing']['era']
+    index_max = params['phasing']['outerloop'] * params['phasing']['average'] * (params['phasing']['hio'] + params['phasing']['era']) + params['phasing']['era_final']
 
     x_g = Psup(x_g)
+    x_av = np.zeros_like(x)
     # track emod
     #-----------
     def errs(emod, index, index_max):
@@ -58,18 +58,27 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         return emod, index
 
     for i in range(params['phasing']['outerloop']):
-        for j in range(params['phasing']['hio']):
-            x_g = HIO(x_g)
-            emod, index = errs(emod, index, index_max)
+        for j in range(params['phasing']['average']):
+	    x = np.random.random(support.shape) + np.random.random(support.shape) * 1J
+            x_g.set(x)
+	    x_g = Psup(x_g)
             
-        for k in range(params['phasing']['era']):
-            x_g = ERA(x_g)
-            emod, index = errs(emod, index, index_max)
-
-        support = shrinkwrap(x_g.get(), params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
+            for k in range(params['phasing']['hio']):
+                x_g = HIO(x_g)
+                emod, index = errs(emod, index, index_max)
+                
+            for k in range(params['phasing']['era']):
+                x_g = ERA(x_g)
+                emod, index = errs(emod, index, index_max)
+            x_av += x_g.get()
+	
+        x_av = x_av / float(params['phasing']['average'])
+        x_g.set(x_av)
+  	 
+        support = shrinkwrap(x_av, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
         print '\n\nshrinking...', np.sum(support), params['shrinkwrap']['stop_pix']
         support_g = pyopencl.array.to_device(projs.queue, np.ascontiguousarray(support.astype(np.int8)))
-
+   
     # final ERA iterations
     i += 1
     for k in range(params['phasing']['era_final']):
