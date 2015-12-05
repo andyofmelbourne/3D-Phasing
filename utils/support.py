@@ -20,16 +20,19 @@ def expand_region_by(mask, frac):
         # we did not find a good candidate 
 
 
-def shrinkwrap(sample, start_pix, stop_pix, steps, step):
+def shrinkwrap(sample, start_pix, stop_pix, steps, step, sigma = 2.):
     from scipy.special import erfc
+    from scipy import ndimage
+    t = np.abs(sample)
+    t = ndimage.gaussian_filter(t, sigma, mode='wrap')
     
     x   = float(step)/float(steps-1)
     pix = (start_pix - stop_pix) * erfc(4*x - 2)/2. + stop_pix
     
     # find the 'pix' highest pixel values in the sample
-    value = np.percentile(np.abs(sample), 100. * (1. - pix / float(sample.size)))
+    value = np.percentile(t, 100. * (1. - pix / float(sample.size)))
      
     support = np.zeros(sample.shape, dtype=np.bool)
     
-    support[np.where(np.abs(sample) > value)] = True
+    support[np.where(t > value)] = True
     return support
