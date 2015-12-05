@@ -95,7 +95,10 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
     f.create_dataset('sample support retrieved', data = support_ret.astype(np.int16))
     f.create_dataset('good pixels', data = good_pix.astype(np.int16))
     f.create_dataset('modulus error', data = emod)
-    f.create_dataset('fidelity error', data = efid)
+    if efid is not None :
+        f.create_dataset('fidelity error', data = efid)
+    else :
+        f.create_dataset('fidelity error', data = -np.ones_like(emod))
     f.create_dataset('sample init', data = solid_unit)
     f.create_dataset('sample retrieved', data = solid_unit_ret)
 

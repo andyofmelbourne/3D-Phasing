@@ -1,84 +1,45 @@
 import numpy as np
 from scipy import ndimage
 
-def Pmod(amp, psi, good_pix):
-    psi           = np.fft.fftn(psi)
-    phase         = np.angle(psi)
-    #phase         = ndimage.gaussian_filter(phase, 0.5)
-    psi           = psi * (1 - good_pix)
-    psi           = psi + amp * np.exp(1J * phase) * good_pix 
-    psi           = np.fft.ifftn(psi)
-    return psi
-
-
-def ERA(psi, support, good_pix, amp):
-    psi_sup = psi * support
-    psi     = Pmod(amp, psi_sup.copy(), good_pix) 
+class Proj():
     
-    mod_err = calc_modulus_err(psi, support, good_pix, amp)
-    sup_err = calc_support_err(psi, support)
-    return psi, mod_err, sup_err
+    def __init__(self):
+        pass
 
+    def _ERA(self, psi, Pmod, Psup):
+        psi = Pmod(Psup(psi))
+        return psi
 
-def DM(psi, support, good_pix, amp, beta):
-    if beta != 1 :
-        print '\n warning! this routine is only designed for beta=1'
-        print ' use DM_beta instead'
-    
-    temp = psi * (2 * support - 1)
+    def _HIO(self, psi, Pmod, Psup, beta):
+        out = Pmod(psi)
+        out = psi + beta * Psup( (1.+1./beta)*out - 1./beta * psi ) - beta * out  
+        return out
 
-    psi += Pmod(amp, temp, good_pix) - psi * support
-    
-    mod_err = calc_modulus_err(psi, support, good_pix, amp)
-    sup_err = calc_support_err(psi, support)
-    return psi, mod_err, sup_err
+    def _HIO_beta1(self, psi, Pmod, Psup):
+        out = Pmod(psi)
+        out = psi + Psup( 2.* out - psi ) - out  
+        return out
 
+    def _Pmod(self, psi, amp, good_pix, alpha = 1.0e-10):
+        out  = good_pix * psi * amp / (np.abs(psi) + alpha)
+        out += ~good_pix * psi
+        return out
 
-def DM_beta(psi, support, good_pix, amp, beta):
-    """
-    psi_j+1 = psi_j - Ps psi_j - Pm psi_j
-            + b(1+1/b) Ps Pm psi_j
-            - b(1-1/b) Pm Ps psi_j
-    """
-    psi_M = psi.copy()
-    psi_M = Pmod(amp, psi_M, good_pix)
-    psi_S = support * psi 
-    psi  -= psi_M + psi_S
-    psi  += beta * (1. + 1. / beta) * support * psi_M
-    psi_S = Pmod(amp, psi_S, good_pix)
-    psi  -= beta * (1. - 1. / beta) * psi_S
+    def Pmod(self, x, amp, good_pix):
+        y = np.fft.fftn(x)
+        y = self._Pmod(y, amp, good_pix)
+        y = np.fft.ifftn(y)
+        return y
 
-    psi_M   = DM_to_sol(psi, support, good_pix, amp, beta)
-    mod_err = calc_modulus_err(psi_M, support, good_pix, amp)
-    psi_M   = Pmod(amp, psi_M, good_pix)
-    sup_err = calc_support_err(psi_M, support)
-    return psi, mod_err, sup_err
-
-
-def DM_to_sol(psi, support, good_pix, amp, beta):
-    psi_M = psi.copy()
-    psi_M = Pmod(amp, psi_M, good_pix)
-    psi_M = (1. + 1./beta) * psi_M - 1./beta * psi
-    psi_M = psi_M * support
-    return psi_M
-
-
-def calc_support_err(psi, support):
-    dummy_comp  = psi.copy()
-    dummy_comp *= support
-    dummy_comp -= psi
-    dummy_comp  = dummy_comp * dummy_comp.conj()
-    dummy_real  = dummy_comp.real
-    
-    sup_err = np.sum(dummy_real) / float(psi.size)
-    return np.sqrt(sup_err)
-
-
-def calc_modulus_err(psi, support, good_pix, amp):
-    dummy_comp  = psi.copy() * support
-    dummy_comp  = np.fft.fftn(dummy_comp)
-    dummy_real  = dummy_comp.__abs__() - amp 
-    dummy_real *= good_pix
-    mod_err     = np.sum( dummy_real * dummy_real) / float(psi.size)
-    return np.sqrt(mod_err)
-
+    def Psup(self, x, support, real = True, pos = True):
+        # apply support
+        y = x * support
+        
+        # apply reality
+        if real :
+            y.imag = 0.0
+        
+        if real and pos :
+            # apply positivity
+            y[np.where(y<0)] = 0.0
+        return y

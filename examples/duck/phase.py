@@ -9,21 +9,6 @@ from utils.support import shrinkwrap
 from src import projection_maps as pm
 
 
-def _ERA(psi, Pmod, Psup):
-    psi = Pmod(Psup(psi))
-    return psi
-
-def _HIO(psi, Pmod, Psup, beta):
-    out = Pmod(psi)
-    out = psi + beta * Psup( (1.+1./beta)*out - 1./beta * psi ) - beta * out  
-    return out
-
-def _Pmod(psi, amp, good_pix, alpha = 1.0e-10):
-    out  = good_pix * psi * amp / (np.abs(psi) + alpha)
-    out += ~good_pix * psi
-    return out
-
-
 def phase(I, support, params, good_pix = None, sample_known = None):
     amp = np.sqrt(I)
     
@@ -31,64 +16,67 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         good_pix = I > -1
     good_pix = good_pix.astype(np.bool)
     support  = support.astype(np.bool)
-    
-    def Pmod(x):
-        y = np.fft.fftn(x)
-        y = _Pmod(y, amp, good_pix)
-        y = np.fft.ifftn(y)
-        return y
 
-    def Psup(x):
-        # apply support
-        y = x * support
-        
-        # apply reality
-        y.imag = 0.0
-        
-        # apply positivity
-        y[np.where(y<0)] = 0.0
-        return y
+    # define the projections
+    #-----------------------
+    projs = pm.Proj()
+    Pmod = lambda x: projs.Pmod(x, amp, good_pix)
+    Psup = lambda x : projs.Psup(x, support, real = True, pos = True)
+    
+    ERA = lambda x : projs._ERA(x, Pmod, Psup)
+    if params['phasing']['beta'] == 1 :
+        HIO = lambda x : projs._HIO_beta1(x, Pmod, Psup)
+    else :
+        HIO = lambda x : projs._HIO_beta1(x, Pmod, Psup, params['phasing']['beta'])
 
     # initial support
+    #----------------
     autoc   = np.fft.ifftn(I)
-    support = shrinkwrap(autoc, 32*32*32, 24 * 28 * 32, 10, 0)
+    support = shrinkwrap(autoc, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], 0)
     
+    # initial guess
+    #--------------
     x = np.random.random(support.shape) + np.random.random(support.shape) * 1J
     x = Psup(x)
-    
-    ERA = lambda x : _ERA(x, Pmod, Psup)
-    HIO = lambda x : _HIO(x, Pmod, Psup, params['phasing']['beta'])
 
-    emod = []
-    efid = []
+
+    emod      = []
     index     = 0
-    index_max = params['phasing']['outerloop'] * (params['phasing']['hio'] + params['phasing']['era'])
+    index_max = params['phasing']['outerloop'] * (params['phasing']['hio'] + params['phasing']['era']) + params['phasing']['era_final']
     print params['phasing']['outerloop'] , params['phasing']['hio'] , params['phasing']['era']
+
+    # track emod
+    #-----------
+    def errs(emod, index, index_max):
+        emod.append( l2norm(x, Pmod(Psup(x))) )
+        update_progress(index / max(1.0, float(index_max-1)), 'HIO', index, emod[-1], -1)
+        index += 1
+        return emod, index
 
     for i in range(params['phasing']['outerloop']):
         for j in range(params['phasing']['hio']):
             x = HIO(x)
+            emod, index = errs(emod, index, index_max)
             
-            emod.append( l2norm(x, Pmod(Psup(x))) )
-            if sample_known is not None :
-                efid.append( l2norm(x, sample_known) )
-            update_progress(index / max(1.0, float(index_max-1)), 'HIO', index, emod[-1], efid[-1])
-            index += 1
-        
         for k in range(params['phasing']['era']):
             x = ERA(x)
-            
-            emod.append( l2norm(x, Pmod(Psup(x))) )
-            if sample_known is not None :
-                efid.append( l2norm(x, sample_known) )
-            update_progress(index / max(1.0, float(index_max-1)), 'ERA', index, emod[-1], efid[-1])
-            index += 1
+            emod, index = errs(emod, index, index_max)
 
-        support = shrinkwrap(x, 32*32*32, 24 * 28 * 32, 10, i)
-        print '\n\nshrinking...', np.sum(support), 24 * 28 * 32
+        support = shrinkwrap(x, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
+        print '\n\nshrinking...', np.sum(support), params['shrinkwrap']['stop_pix']
+
+    # final ERA iterations
+    i += 1
+    for k in range(params['phasing']['era_final']):
+        x = ERA(x)
+        emod, index = errs(emod, index, index_max)
+        
+    support = shrinkwrap(x, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
+    print '\n\nshrinking...', np.sum(support), params['shrinkwrap']['stop_pix']
 
     M = np.abs(np.fft.fftn(Psup(x)))**2
-    return x, M, emod, efid
+    return x, M, emod, None
+
 
 if __name__ == "__main__":
     args = io_utils.parse_cmdline_args_phasing()
