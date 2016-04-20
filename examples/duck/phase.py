@@ -24,9 +24,6 @@ def centre(array):
     return array
 
 def phase(I, support, params, good_pix = None, sample_known = None):
-    print np.sum(support)
-    print params['phasing']['support'] 
-    print params['highest_N']
     if params['phasing']['support'] == 'highest_N':
         support = params['highest_N']['n']
         print 'Will threshold the sample to the',support,'most intense pixels at each iteration'
@@ -38,19 +35,22 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         # Difference Map
         #---------------
         x, info = dm.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, background = None, \
-                  method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+                  method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+                  dtype = 'double', full_output = True)
         eMod += info['eMod']
         
         # Error reduction algorithm
         #--------------------------
         x, info = era.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, background = None, \
-                  method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+                  method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+                  dtype = 'double', full_output = True)
         eMod += info['eMod']
 
     # Error reduction algorithm
     #--------------------------
     x, info = era.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, background = None, \
-              method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+              method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+              dtype = 'double', full_output = True)
     eMod += info['eMod']
     
     return centre(x), info['I'], eMod, None

@@ -91,7 +91,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     """
     if hardware == 'gpu':
         from era_gpu import ERA_gpu
-        return ERA_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
+        return ERA_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, full_output)
     
     method = 1
     

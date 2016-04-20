@@ -114,9 +114,14 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     [1] Veit Elser, "Phase retrieval by iterated projections," J. Opt. Soc. Am. A 
         20, 40-55 (2003)
     """
+    """
     if hardware == 'gpu':
         from dm_gpu import DM_gpu
         return DM_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
+    """
+    if hardware == 'gpu':
+        from dm_gpu import DM_gpu
+        return DM_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, full_output)
     
     method = 1
     
@@ -147,7 +152,8 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     # method 1
     #---------
     if method == 1 :
-        print '\n\nalgrithm progress iteration convergence modulus error'
+        if iters > 0 :
+            print '\n\nalgrithm progress iteration convergence modulus error'
         for i in range(iters) :
             
             # reference
