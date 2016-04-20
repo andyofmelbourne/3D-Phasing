@@ -24,8 +24,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     iters : int
         The number of ERA iterations to perform.
     
-    support : numpy.ndarray or None, (N, M, K)
+    support : (numpy.ndarray, None or int), (N, M, K)
         Real-space region where the object function is known to be zero. 
+        If support is an integer then the N most intense pixels will be kept at
+        each iteration.
     
     mask : numpy.ndarray, (N, M, K), optional, default (1)
         The valid detector pixels. Mask[i, j, k] = 1 (or True) when the detector pixel 
@@ -33,26 +35,17 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     
     method : (None, 1, 2, 3, 4), optional, default (None)
         method = None :
-            Automattically choose method 1, 2 or 3 based on the contents of 'O' and 'P'.
-            if   O == None and P == None then method = 3
-            elif O == None then method = 1
-            elif P == None then method = 2
+            Automattically choose method 1, 2 based on the contents of 'background'.
+            if   'background' == None then method = 1
+            elif 'background' != None then method = 2
         method = 1 :
             Just update 'O'
         method = 2 :
-            Just update 'P'
-        method = 3 :
-            Update 'O' and 'P'
-        method = 4 :
             Update 'O' and 'background'
-        method = 5 :
-            Update 'P' and 'background'
-        method = 6 :
-            Update 'O', 'P' and 'background'
     
-    hardware : ('cpu', 'gpu', 'mpi'), optional, default ('cpu') 
-        Choose to run the reconstruction on a single cpu core ('cpu'), a single gpu
-        ('gpu') or many cpu's ('mpi'). The numerical results should be identical.
+    hardware : ('cpu', 'gpu'), optional, default ('cpu') 
+        Choose to run the reconstruction on a single cpu core ('cpu') or a single gpu
+        ('gpu'). The numerical results should be identical.
     
     alpha : float, optional, default (1.0e-10)
         A floating point number to regularise array division (prevents 1/0 errors).
@@ -99,15 +92,9 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     if hardware == 'gpu':
         from era_gpu import ERA_gpu
         return ERA_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
-    elif hardware == 'mpi':
-        from era_mpi import ERA_mpi
-        return ERA_mpi(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
-    elif hardware == 'mpi_gpu':
-        from era_mpi_gpu import ERA_mpi_gpu
-        return ERA_mpi_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
-
+    
     method = 1
-
+    
     if dtype is None :
         dtype   = I.dtype
         c_dtype = (I[0,0,0] + 1J * I[0, 0, 0]).dtype
@@ -124,7 +111,6 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         O = np.random.random((I.shape)).astype(c_dtype)
     
     O    = O.astype(c_dtype)
-    O_in = O.copy()
     
     I_norm    = np.sum(mask * I)
     amp       = np.sqrt(I).astype(dtype)
@@ -134,7 +120,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     # method 1
     #---------
     if method == 1 :
-        print 'algrithm progress iteration convergence modulus error'
+        if iters > 0 :
+            print '\n\nalgrithm progress iteration convergence modulus error'
         for i in range(iters) :
             O0 = O.copy()
             
@@ -144,13 +131,17 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             O1 = O.copy()
             
             # support projection 
-            O = O * support
+            if type(support) is int :
+                S = choose_N_highest_pixels( (O * O.conj()).real, support)
+            else :
+                S = support
+            O = O * S
             
             # metrics
             O2 = O.copy()
             
             O2    -= O0
-            eCon   = np.sum( (O2 * O2.conj()).real ) / np.sum( (O2 * O2.conj()).real )
+            eCon   = np.sum( (O2 * O2.conj()).real ) / np.sum( (O0 * O0.conj()).real )
             eCon   = np.sqrt(eCon)
             
             O1    -= O0
@@ -164,8 +155,6 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         
         if full_output : 
             info = {}
-            info['O_in']  = O_in
-            info['O_out'] = O
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods
             info['eCon']  = eCons
@@ -173,10 +162,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         else :
             return O
 
-    # method 4 or 5
+    # method 2
     #---------
     # update the object with background retrieval
-    elif method == 4 or method == 5 or method == 6 :
+    elif method == 2 :
         if background is None :
             background = np.random.random((I.shape)).astype(dtype)
         else :
@@ -196,7 +185,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             exits, background  = pmod_7(amp, background, exits, mask, alpha = alpha)
             
             E_bak       -= exits
-
+            
             # consistency projection 
             if update == 'O': O, P_heatmap = psup_O_1(exits, P, R, O.shape, P_heatmap, alpha = alpha)
             if update == 'P': P, O_heatmap = psup_P_1(exits, O, R, O_heatmap, alpha = alpha)
@@ -261,11 +250,21 @@ def update_progress(progress, algorithm, i, emod, esup):
     sys.stdout.write(text)
     sys.stdout.flush()
 
+def choose_N_highest_pixels(array, N):
+    percent = (1. - float(N) / float(array.size)) * 100.
+    thresh  = np.percentile(array, percent)
+    support = array > thresh
+    # print '\n\nchoose_N_highest_pixels'
+    # print 'percentile         :', percent, '%'
+    # print 'intensity threshold:', thresh
+    # print 'number of pixels in support:', np.sum(support)
+    return support
+
 def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
     O = np.fft.fftn(O)
     O = Pmod_1(amp, O, mask = mask, alpha = alpha)
-    O = np.fft.ifftn(O, axes = (-2, -1))
-    return exits
+    O = np.fft.ifftn(O)
+    return O
     
 def Pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
     O  = mask * O * amp / (abs(O) + alpha)
@@ -285,3 +284,98 @@ def Pmod_7(amp, background, exits, mask = 1, alpha = 1.0e-10):
     exits += (1 - mask) * exits
     return exits, background
 
+def multiroll(x, shift, axis=None):
+    """Roll an array along each axis.
+    Thanks to: Warren Weckesser, 
+    http://stackoverflow.com/questions/30639656/numpy-roll-in-several-dimensions
+    
+    
+    Parameters
+    ----------
+    x : array_like
+        Array to be rolled.
+    shift : sequence of int
+        Number of indices by which to shift each axis.
+    axis : sequence of int, optional
+        The axes to be rolled.  If not given, all axes is assumed, and
+        len(shift) must equal the number of dimensions of x.
+    Returns
+    -------
+    y : numpy array, with the same type and size as x
+        The rolled array.
+    Notes
+    -----
+    The length of x along each axis must be positive.  The function
+    does not handle arrays that have axes with length 0.
+    See Also
+    --------
+    numpy.roll
+    Example
+    -------
+    Here's a two-dimensional array:
+    >>> x = np.arange(20).reshape(4,5)
+    >>> x 
+    array([[ 0,  1,  2,  3,  4],
+           [ 5,  6,  7,  8,  9],
+           [10, 11, 12, 13, 14],
+           [15, 16, 17, 18, 19]])
+    Roll the first axis one step and the second axis three steps:
+    >>> multiroll(x, [1, 3])
+    array([[17, 18, 19, 15, 16],
+           [ 2,  3,  4,  0,  1],
+           [ 7,  8,  9,  5,  6],
+           [12, 13, 14, 10, 11]])
+    That's equivalent to:
+    >>> np.roll(np.roll(x, 1, axis=0), 3, axis=1)
+    array([[17, 18, 19, 15, 16],
+           [ 2,  3,  4,  0,  1],
+           [ 7,  8,  9,  5,  6],
+           [12, 13, 14, 10, 11]])
+    Not all the axes must be rolled.  The following uses
+    the `axis` argument to roll just the second axis:
+    >>> multiroll(x, [2], axis=[1])
+    array([[ 3,  4,  0,  1,  2],
+           [ 8,  9,  5,  6,  7],
+           [13, 14, 10, 11, 12],
+           [18, 19, 15, 16, 17]])
+    which is equivalent to:
+    >>> np.roll(x, 2, axis=1)
+    array([[ 3,  4,  0,  1,  2],
+           [ 8,  9,  5,  6,  7],
+           [13, 14, 10, 11, 12],
+           [18, 19, 15, 16, 17]])
+    """
+    x = np.asarray(x)
+    if axis is None:
+        if len(shift) != x.ndim:
+            raise ValueError("The array has %d axes, but len(shift) is only "
+                             "%d. When 'axis' is not given, a shift must be "
+                             "provided for all axes." % (x.ndim, len(shift)))
+        axis = range(x.ndim)
+    else:
+        # axis does not have to contain all the axes.  Here we append the
+        # missing axes to axis, and for each missing axis, append 0 to shift.
+        missing_axes = set(range(x.ndim)) - set(axis)
+        num_missing = len(missing_axes)
+        axis = tuple(axis) + tuple(missing_axes)
+        shift = tuple(shift) + (0,)*num_missing
+
+    # Use mod to convert all shifts to be values between 0 and the length
+    # of the corresponding axis.
+    shift = [s % x.shape[ax] for s, ax in zip(shift, axis)]
+
+    # Reorder the values in shift to correspond to axes 0, 1, ..., x.ndim-1.
+    shift = np.take(shift, np.argsort(axis))
+
+    # Create the output array, and copy the shifted blocks from x to y.
+    y = np.empty_like(x)
+    src_slices = [(slice(n-shft, n), slice(0, n-shft))
+                  for shft, n in zip(shift, x.shape)]
+    dst_slices = [(slice(0, shft), slice(shft, n))
+                  for shft, n in zip(shift, x.shape)]
+    src_blks = product(*src_slices)
+    dst_blks = product(*dst_slices)
+    for src_blk, dst_blk in zip(src_blks, dst_blks):
+        y[dst_blk] = x[src_blk]
+
+    return y

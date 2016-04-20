@@ -7,75 +7,53 @@ from utils.l2norm import l2norm
 from utils.progress_bar import update_progress
 from utils.support import shrinkwrap
 from src import projection_maps as pm
+from src import era
+from src import dm
 
+def centre(array):
+    # get the centre of mass of |P|^2
+    import scipy.ndimage
+    a  = (array.conj() * array).real
+    cm = np.rint(scipy.ndimage.measurements.center_of_mass(a)).astype(np.int)# - np.array(a.shape)/2
+    
+    # centre array
+    array = np.roll(array, -cm[0], 0)
+    array = np.roll(array, -cm[1], 1)
+    array = np.roll(array, -cm[2], 2)
+    #array = era.multiroll(array, -cm)
+    return array
 
 def phase(I, support, params, good_pix = None, sample_known = None):
-    amp = np.sqrt(I)
-    
-    if good_pix is None :
-        good_pix = I > -1
-    good_pix = good_pix.astype(np.bool)
-    support  = support.astype(np.bool)
+    print np.sum(support)
+    print params['phasing']['support'] 
+    print params['highest_N']
+    if params['phasing']['support'] == 'highest_N':
+        support = params['highest_N']['n']
+        print 'Will threshold the sample to the',support,'most intense pixels at each iteration'
 
-    # define the projections
-    #-----------------------
-    projs = pm.Proj()
-    Pmod = lambda x: projs.Pmod(x, amp, good_pix)
-    Psup = lambda x : projs.Psup(x, support, real = True, pos = True)
-    
-    ERA = lambda x : projs._ERA(x, Pmod, Psup)
-    if params['phasing']['beta'] == 1 :
-        HIO = lambda x : projs._HIO_beta1(x, Pmod, Psup)
-    else :
-        HIO = lambda x : projs._HIO_beta1(x, Pmod, Psup, params['phasing']['beta'])
-
-    # initial support
-    #----------------
-    autoc   = np.fft.ifftn(I)
-    support = shrinkwrap(autoc, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], 0)
-    
-    # initial guess
-    #--------------
-    x = np.random.random(support.shape) + np.random.random(support.shape) * 1J
-    x = Psup(x)
-
-
-    emod      = []
-    index     = 0
-    index_max = params['phasing']['outerloop'] * (params['phasing']['hio'] + params['phasing']['era']) + params['phasing']['era_final']
-    print params['phasing']['outerloop'] , params['phasing']['hio'] , params['phasing']['era']
-
-    # track emod
-    #-----------
-    def errs(emod, index, index_max):
-        emod.append( l2norm(x, Pmod(Psup(x))) )
-        update_progress(index / max(1.0, float(index_max-1)), 'HIO', index, emod[-1], -1)
-        index += 1
-        return emod, index
-
+    x    = None
+    eMod = []
     for i in range(params['phasing']['outerloop']):
-        for j in range(params['phasing']['hio']):
-            x = HIO(x)
-            emod, index = errs(emod, index, index_max)
-            
-        for k in range(params['phasing']['era']):
-            x = ERA(x)
-            emod, index = errs(emod, index, index_max)
-
-        support = shrinkwrap(x, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
-        print '\n\nshrinking...', np.sum(support), params['shrinkwrap']['stop_pix']
-
-    # final ERA iterations
-    i += 1
-    for k in range(params['phasing']['era_final']):
-        x = ERA(x)
-        emod, index = errs(emod, index, index_max)
         
-    support = shrinkwrap(x, params['shrinkwrap']['start_pix'], params['shrinkwrap']['stop_pix'], params['shrinkwrap']['steps'], i)
-    print '\n\nshrinking...', np.sum(support), params['shrinkwrap']['stop_pix']
+        # Difference Map
+        #---------------
+        x, info = dm.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, background = None, \
+                  method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+        eMod += info['eMod']
+        
+        # Error reduction algorithm
+        #--------------------------
+        x, info = era.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, background = None, \
+                  method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+        eMod += info['eMod']
 
-    M = np.abs(np.fft.fftn(Psup(x)))**2
-    return x, M, emod, None
+    # Error reduction algorithm
+    #--------------------------
+    x, info = era.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, background = None, \
+              method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'double', full_output = True)
+    eMod += info['eMod']
+    
+    return centre(x), info['I'], eMod, None
 
 
 if __name__ == "__main__":
