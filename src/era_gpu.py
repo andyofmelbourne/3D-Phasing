@@ -70,8 +70,9 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
 
     O_g   = pyopencl.array.to_device(queue, np.ascontiguousarray(O))
     amp_g = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
+    support_g = pyopencl.array.to_device(queue, np.ascontiguousarray(np.ones_like(O).astype(np.int8)))
     if type(support) is not int :
-        support_g = pyopencl.array.to_device(queue, np.ascontiguousarray(support.astype(np.int8)))
+        support_g.set(support)
     if mask is not 1 :
         mask_g    = np.empty(I.shape, dtype=np.int8)
         mask_g[:] = mask.astype(np.int8)*2 - 1
@@ -79,6 +80,7 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
     else :
         mask_g  = 1
 
+    O_sol = None
     # method 1
     #---------
     if method == 1 :
@@ -93,11 +95,10 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
             O1 = O_g.copy()
             
             # support projection 
-            if type(support) is int :
-                S = era.choose_N_highest_pixels( (O_g * O_g.conj()).real, support)
-            else :
-                S = support_g
-            O_g = O_g * S
+            if type(support) is int and (i % 1) == 0 :
+                S = era.choose_N_highest_pixels( (O_g * O_g.conj()).real.get(), support)
+                support_g.set(S.astype(np.int8))
+            O_g = O_g * support_g
             
             # metrics
             O2 = O_g.copy()
@@ -115,6 +116,9 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
             
             eMods.append(eMod)
             eCons.append(eCon)
+        
+        if O_sol is None :
+            O_sol = O_g
         
         if full_output : 
             O = O_g.get()
@@ -142,3 +146,11 @@ def Pmod_gpu(amp, O, mask = 1, alpha = 1.0e-10):
         pyopencl.array.if_positive(mask, O2, O, out = O)
         #exits.mul_add(mask * amp / (abs(exits) + alpha), (1 - mask), exits)
     return O
+
+def choose_N_highest_pixels(array, N, sorter):
+    # sort the array
+    a  = np.random.random((10,))
+    sgs, evt = sorter(a)
+    print sgs.get()
+    import sys
+    sys.exit()

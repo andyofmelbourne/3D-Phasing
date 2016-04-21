@@ -73,15 +73,16 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
 
     O_g   = pyopencl.array.to_device(queue, np.ascontiguousarray(O))
     amp_g = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
+    support_g = pyopencl.array.to_device(queue, np.ascontiguousarray(np.ones_like(O).astype(np.int8)))
     if type(support) is not int :
-        support_g = pyopencl.array.to_device(queue, np.ascontiguousarray(support.astype(np.int8)))
+        support_g.set(support)
     if mask is not 1 :
         mask_g    = np.empty(I.shape, dtype=np.int8)
         mask_g[:] = mask.astype(np.int8)*2 - 1
         mask_g    = pyopencl.array.to_device(queue, np.ascontiguousarray(mask_g))
     else :
         mask_g  = 1
-    O_sol = O.copy()
+    O_sol = None
     
     # method 1
     #---------
@@ -96,11 +97,14 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             # update 
             #-------
             # support projection 
-            if type(support) is int :
-                S = era.choose_N_highest_pixels( (O_g * O_g.conj()).real, support_g)
-            else :
-                S = support_g
-            O0 = O_g * S
+            if type(support) is int and (i % 1) == 0 :
+                #O_sol = 2 * O_g * support_g - O_g
+                #O_sol = era_gpu.pmod_gpu(amp_g, O_sol, plan, mask_g, alpha = alpha)
+                O_sol = O_g.copy()
+                
+                S = era.choose_N_highest_pixels( (O_sol * O_sol.conj()).real.get(), support)
+                support_g.set(S.astype(np.int8))
+            O0 = O_g * support_g
             
             O_g  -= O0
             O0   -= O_g
@@ -116,7 +120,7 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             eCon   = np.sqrt(eCon / tot)
             
             # f* = Ps f_i = PM (2 Ps f_i - f_i)
-            O_sol = O_g * S
+            O_sol = O_g * support_g
             eMod  = model_error_gpu(amp_g, O_sol, plan, mask_g, background = 0)
             eMod  = np.sqrt( eMod / I_norm )
             
@@ -125,15 +129,18 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             eMods.append(eMod)
             eCons.append(eCon)
         
+        if O_sol is None :
+            O_sol = O_g
+        
         if full_output : 
-            O = O_g.get()
+            O = (O_g * support_g).get()
             info = {}
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods
             info['eCon']  = eCons
-            return O_sol.get(), info
+            return O, info
         else :
-            return O_sol.get()
+            return O
 
 
 

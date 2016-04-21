@@ -30,6 +30,14 @@ def phase(I, support, params, good_pix = None, sample_known = None):
 
     x    = None
     eMod = []
+
+    # Error reduction algorithm
+    #--------------------------
+    x, info = era.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, background = None, \
+              method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+              dtype = 'double', full_output = True)
+    eMod += info['eMod']
+
     for i in range(params['phasing']['outerloop']):
         
         # Difference Map
