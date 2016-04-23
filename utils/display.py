@@ -57,10 +57,10 @@ class Show_vol(QtGui.QWidget):
 class Application():
 
     def __init__(self, diff, diff_ret, support, support_ret, \
-                 good_pix, solid_unit, solid_unit_ret,       \
-                 emod, efid):
+                 good_pix, solid_unit, solid_units_ret,       \
+                 emods, econs, efids):
         
-        solid_unit_ret = np.fft.ifftshift(solid_unit_ret.real)
+        solid_unit_ret = np.fft.ifftshift(solid_units_ret[0].real)
         duck_plots = (np.sum(solid_unit_ret, axis=0),\
                       np.sum(solid_unit_ret, axis=1),\
                       np.sum(solid_unit_ret, axis=2))
@@ -103,7 +103,8 @@ class Application():
 
         # line plots of the error metrics
         self.plot_emod = pg.PlotWidget()
-        self.plot_efid = pg.PlotWidget()
+        #self.plot_efid = pg.PlotWidget()
+        self.plot_econ = pg.PlotWidget()
          
         Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
 
@@ -122,7 +123,7 @@ class Application():
         # errors
         Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
         Hsplitter.addWidget(self.plot_emod)
-        Hsplitter.addWidget(self.plot_efid)
+        Hsplitter.addWidget(self.plot_econ)
         Vsplitter.addWidget(Hsplitter)
         
         hlayout_tot = QtGui.QHBoxLayout()
@@ -134,10 +135,12 @@ class Application():
         self.support_plots.setImage(support_plots.T)
         self.diff_plots.setImage(diff_plots.T)
         self.diff_ret_plots.setImage(diff_ret_plots.T)
-        self.plot_emod.plot(emod)
+        for emod in emods : 
+            self.plot_emod.plot(emod)
         self.plot_emod.setTitle('Modulus error l2norm:')
-        self.plot_efid.plot(efid)
-        self.plot_efid.setTitle('Fidelity error l2norm:')
+        for econ in econs : 
+            self.plot_econ.plot(econ)
+        self.plot_econ.setTitle('convergence l2norm:')
         
         ## Display the widget as a new window
         w.show()
@@ -240,12 +243,12 @@ if __name__ == '__main__':
     elif args.inout == 'output':
         # read the h5 file 
         diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_unit_ret, \
-        emod, efid                             = io_utils.read_output_h5(args.path)
+        good_pix, solid_unit, solid_units_ret, \
+        emods, econs, efids                      = io_utils.read_output_h5(args.path)
 
         ex  = Application(diff, diff_ret, support, support_ret, \
-                          good_pix, solid_unit, solid_unit_ret, \
-                          emod, efid)
+                          good_pix, solid_unit, solid_units_ret, \
+                          emods, econs, efids)
     
     signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
     app = QtGui.QApplication(sys.argv)

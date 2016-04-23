@@ -83,24 +83,29 @@ def parse_cmdline_args_phasing():
 
 
 def write_output_h5(path, diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_unit_ret, emod, efid):
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids):
     import os, h5py
     fnam = os.path.join(path, 'output.h5')
     if_exists_del(fnam)
     
+    emods = np.array(emods)
+    econs = np.array(econs)
+    
     f = h5py.File(fnam, 'w')
-    f.create_dataset('data', data = diff)
-    f.create_dataset('data retrieved', data = diff_ret)
-    f.create_dataset('sample support', data = support.astype(np.int16))
-    f.create_dataset('sample support retrieved', data = support_ret.astype(np.int16))
-    f.create_dataset('good pixels', data = good_pix.astype(np.int16))
-    f.create_dataset('modulus error', data = emod)
-    if efid is not None :
-        f.create_dataset('fidelity error', data = efid)
+    f.create_dataset('data', chunks = diff.shape, data = diff, compression='gzip')
+    f.create_dataset('data retrieved', chunks = diff.shape, data = diff_ret, compression='gzip')
+    f.create_dataset('sample support', chunks = support.shape, data = support.astype(np.int16), compression='gzip')
+    f.create_dataset('sample support retrieved', chunks = support_ret.shape, data = support_ret.astype(np.int16), compression='gzip')
+    f.create_dataset('good pixels', chunks = good_pix.shape, data = good_pix.astype(np.int16), compression='gzip')
+    f.create_dataset('modulus error', chunks = emods.shape, data = emods, compression='gzip')
+    f.create_dataset('convergence metric', chunks = econs.shape, data = np.array(econs), compression='gzip')
+    if efids is not None :
+        efids = np.array(efids)
+        f.create_dataset('fidelity error', chunks = efids.shape, data = efids, compression='gzip')
     else :
-        f.create_dataset('fidelity error', data = -np.ones_like(emod))
-    f.create_dataset('sample init', data = solid_unit)
-    f.create_dataset('sample retrieved', data = solid_unit_ret)
+        f.create_dataset('fidelity error', chunks = emods.shape, data = -np.ones_like(emods), compression='gzip')
+    f.create_dataset('sample init', chunks = solid_unit.shape, data = solid_unit, compression='gzip')
+    f.create_dataset('sample retrieved', chunks = (1,) + solid_units_ret.shape[1 :], data = solid_units_ret, compression='gzip')
 
     # read the config file and dump it into the h5 file
     """
@@ -117,15 +122,16 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
 def read_output_h5(path):
     import os, h5py
     f = h5py.File(path, 'r')
-    diff           = f['data'].value
-    diff_ret       = f['data retrieved'].value
-    support        = f['sample support'].value.astype(np.bool)
-    support_ret    = f['sample support retrieved'].value.astype(np.bool)
-    good_pix       = f['good pixels'].value.astype(np.bool)
-    emod           = f['modulus error'].value
-    efid           = f['fidelity error'].value
-    solid_unit     = f['sample init'].value
-    solid_unit_ret = f['sample retrieved'].value
+    diff            = f['data'].value
+    diff_ret        = f['data retrieved'].value
+    support         = f['sample support'].value.astype(np.bool)
+    support_ret     = f['sample support retrieved'].value.astype(np.bool)
+    good_pix        = f['good pixels'].value.astype(np.bool)
+    emods           = f['modulus error'].value
+    econs           = f['convergence metric'].value
+    efids           = f['fidelity error'].value
+    solid_unit      = f['sample init'].value
+    solid_units_ret = f['sample retrieved'].value
     #config_file    = f['config file'].value
 
     f.close()
@@ -142,7 +148,7 @@ def read_output_h5(path):
     """
     
     return diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_unit_ret, emod, efid
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids
 
 
 def write_input_h5(path, diff, support, good_pix, solid_known, config):

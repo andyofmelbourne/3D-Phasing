@@ -10,7 +10,7 @@ from   pyfft.cl import Plan
 import pyopencl.clmath 
 
 
-def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', full_output = True):
+def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     GPU variant of era.ERA
     """
@@ -41,32 +41,33 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
     # set up the gpu
     #---------------
     #---------------
-    # get the CUDA platform
-    #print 'opencl platforms found:'
-    platforms = pyopencl.get_platforms()
-    for p in platforms:
-        #print '\t', p.name
-        if p.name == 'NVIDIA CUDA':
-            platform = p
-            #print '\tChoosing', p.name
+    if queue is None and plan is None :
+        # get the CUDA platform
+        #print 'opencl platforms found:'
+        platforms = pyopencl.get_platforms()
+        for p in platforms:
+            #print '\t', p.name
+            if p.name == 'NVIDIA CUDA':
+                platform = p
+                #print '\tChoosing', p.name
 
-    # get one of the gpu's device id
-    #print '\nopencl devices found:'
-    devices = platform.get_devices()
-    #for d in devices:
-    #    print '\t', d.name
+        # get one of the gpu's device id
+        #print '\nopencl devices found:'
+        devices = platform.get_devices()
+        #for d in devices:
+        #    print '\t', d.name
 
-    #print '\tChoosing', devices[0].name
-    device = devices[0]
-    
-    # create a context for the device
-    context = pyopencl.Context([device])
-    
-    # create a command queue for the device
-    queue = pyopencl.CommandQueue(context)
-    
-    # make a plan for the ffts
-    plan = Plan(I.shape, dtype=c_dtype, queue=queue)
+        #print '\tChoosing', devices[0].name
+        device = devices[0]
+        
+        # create a context for the device
+        context = pyopencl.Context([device])
+        
+        # create a command queue for the device
+        queue = pyopencl.CommandQueue(context)
+        
+        # make a plan for the ffts
+        plan = Plan(I.shape, dtype=c_dtype, queue=queue)
 
     O_g   = pyopencl.array.to_device(queue, np.ascontiguousarray(O))
     amp_g = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
@@ -120,8 +121,10 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
         if O_sol is None :
             O_sol = O_g
         
+        O = O_g.get()
+        queue.flush()    
+        queue.finish()    
         if full_output : 
-            O = O_g.get()
             info = {}
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods

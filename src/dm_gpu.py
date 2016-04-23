@@ -11,7 +11,7 @@ import pyopencl.array
 import pyopencl.clmath 
 from   pyfft.cl import Plan
 
-def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', full_output = True):
+def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     GPU variant of dm.DM
     """
@@ -30,59 +30,62 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
         dtype   = np.float64
         c_dtype = np.complex128
 
+
     if O is None :
         O = np.random.random((I.shape)).astype(c_dtype)
+
+    I_norm  = np.sum(mask * I)
+    amp     = np.sqrt(I).astype(dtype)
+    O       = O.astype(c_dtype)
     
-    O     = O.astype(c_dtype)
-    O     = O * support
-    
-    I_norm    = np.sum(mask * I)
-    amp       = np.sqrt(I).astype(dtype)
     eMods     = []
     eCons     = []
 
     # set up the gpu
     #---------------
     #---------------
-    # get the CUDA platform
-    #print 'opencl platforms found:'
-    platforms = pyopencl.get_platforms()
-    for p in platforms:
-        #print '\t', p.name
-        if p.name == 'NVIDIA CUDA':
-            platform = p
-            #print '\tChoosing', p.name
+    if queue is None and plan is None :
+        # get the CUDA platform
+        #print 'opencl platforms found:'
+        platforms = pyopencl.get_platforms()
+        for p in platforms:
+            #print '\t', p.name
+            if p.name == 'NVIDIA CUDA':
+                platform = p
+                #print '\tChoosing', p.name
 
-    # get one of the gpu's device id
-    #print '\nopencl devices found:'
-    devices = platform.get_devices()
-    #for d in devices:
-    #    print '\t', d.name
+        # get one of the gpu's device id
+        #print '\nopencl devices found:'
+        devices = platform.get_devices()
+        #for d in devices:
+        #    print '\t', d.name
 
-    #print '\tChoosing', devices[0].name
-    device = devices[0]
-    
-    # create a context for the device
-    context = pyopencl.Context([device])
-    
-    # create a command queue for the device
-    queue = pyopencl.CommandQueue(context)
-    
-    # make a plan for the ffts
-    plan = Plan(I.shape, dtype=c_dtype, queue=queue)
+        #print '\tChoosing', devices[0].name
+        device = devices[0]
+        
+        # create a context for the device
+        context = pyopencl.Context([device])
+        
+        # create a command queue for the device
+        queue = pyopencl.CommandQueue(context)
+        
+        # make a plan for the ffts
+        plan = Plan(I.shape, dtype=c_dtype, queue=queue)
 
-    O_g   = pyopencl.array.to_device(queue, np.ascontiguousarray(O))
-    amp_g = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
+    O_g       = pyopencl.array.to_device(queue, np.ascontiguousarray(O))
+    O0        = O_g.copy()
+    amp_g     = pyopencl.array.to_device(queue, np.ascontiguousarray(amp))
     support_g = pyopencl.array.to_device(queue, np.ascontiguousarray(np.ones_like(O).astype(np.int8)))
     if type(support) is not int :
         support_g.set(support)
+    
     if mask is not 1 :
-        mask_g    = np.empty(I.shape, dtype=np.int8)
-        mask_g[:] = mask.astype(np.int8)*2 - 1
-        mask_g    = pyopencl.array.to_device(queue, np.ascontiguousarray(mask_g))
+        mask_g     = pyopencl.array.to_device(queue, np.ascontiguousarray(mask.astype(np.int8)))
+        mask2_g    = mask.astype(np.int8)*2 - 1
+        mask2_g    = pyopencl.array.to_device(queue, np.ascontiguousarray(mask2_g))
     else :
         mask_g  = 1
-    O_sol = None
+        mask2_g = 1
     
     # method 1
     #---------
@@ -98,30 +101,27 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             #-------
             # support projection 
             if type(support) is int and (i % 1) == 0 :
-                #O_sol = 2 * O_g * support_g - O_g
-                #O_sol = era_gpu.pmod_gpu(amp_g, O_sol, plan, mask_g, alpha = alpha)
-                O_sol = O_g.copy()
-                
-                S = era.choose_N_highest_pixels( (O_sol * O_sol.conj()).real.get(), support)
+                S = era.choose_N_highest_pixels( (O_g * O_g.conj()).real.get(), support)
                 support_g.set(S.astype(np.int8))
+            
             O0 = O_g * support_g
             
             O_g  -= O0
             O0   -= O_g
-            O0    = era_gpu.pmod_gpu(amp_g, O0, plan, mask_g, alpha = alpha)
+            O0    = era_gpu.pmod_gpu(amp_g, O0, plan, mask2_g, alpha = alpha)
             O_g  += O0
             
             # metrics
             #--------
-            O_bak -= O_g.copy()
+            O_bak = O_bak - O_g
 
             tot    = pyopencl.array.sum((O_g * O_g.conj()).real).get()
             eCon   = pyopencl.array.sum((O_bak * O_bak.conj()).real).get()
             eCon   = np.sqrt(eCon / tot)
             
             # f* = Ps f_i = PM (2 Ps f_i - f_i)
-            O_sol = O_g * support_g
-            eMod  = model_error_gpu(amp_g, O_sol, plan, mask_g, background = 0)
+            O0    = O_g * support_g
+            eMod  = model_error_gpu(amp_g, O0, plan, mask_g, background = 0)
             eMod  = np.sqrt( eMod / I_norm )
             
             era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
@@ -129,11 +129,11 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             eMods.append(eMod)
             eCons.append(eCon)
         
-        if O_sol is None :
-            O_sol = O_g
-        
+        O0   = O_g * support_g
+        O    = O0.get()
+        queue.flush()    
+        queue.finish()    
         if full_output : 
-            O = (O_g * support_g).get()
             info = {}
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods
@@ -143,9 +143,11 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, method = No
             return O
 
 
-
 def model_error_gpu(amp, O, plan, mask, background = 0):
     plan.execute(O.data)
     M   = pyopencl.clmath.sqrt((O.conj() * O).real + background**2)
-    err = pyopencl.array.sum( mask * (M - amp)**2 ).get()
+    M   = (M - amp)**2
+    M   = M * mask
+    #pyopencl.array.if_positive(mask, M, 0, out = M)
+    err = pyopencl.array.sum( M ).get()
     return err

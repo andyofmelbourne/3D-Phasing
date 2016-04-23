@@ -18,8 +18,14 @@ if __name__ == "__main__":
     
     params = io_utils.parse_parameters(config)
     
+    # make input 
+    if params.has_key('input') and  params['input'].has_key('script'):
+        runstr = "python " + params['input']['script'] + ' ' + args.config
+        print '\n',runstr
+        subprocess.call([runstr], shell=True)
+
     # forward problem
-    if params['simulation']['sample'] == 'duck':
+    if params.has_key('simulation') and params['simulation']['sample'] == 'duck':
         diff, beamstop, edges, support, solid_unit = duck.generate_diff(params)
         
         # write to file

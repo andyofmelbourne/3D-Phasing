@@ -140,9 +140,8 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     if O is None :
         O = np.random.random((I.shape)).astype(c_dtype)
     
-    O     = O.astype(c_dtype)
-    O_sol = O.copy()
-    O     = O * support
+    O  = O.astype(c_dtype)
+    O0 = O.copy()
     
     I_norm    = np.sum(mask * I)
     amp       = np.sqrt(I).astype(dtype)
@@ -180,8 +179,8 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             eCon   = np.sqrt(eCon)
             
             # f* = Ps f_i = PM (2 Ps f_i - f_i)
-            O_sol = O * S
-            eMod  = model_error(amp, O_sol, mask, background = 0)
+            O0    = O * S
+            eMod  = model_error(amp, O0, mask, background = 0)
             eMod  = np.sqrt( eMod / I_norm )
             
             era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
@@ -191,12 +190,12 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
         
         if full_output : 
             info = {}
-            info['I']     = np.abs(np.fft.fftn(O))**2
+            info['I']     = np.abs(np.fft.fftn(O0))**2
             info['eMod']  = eMods
             info['eCon']  = eCons
-            return O_sol, info
+            return O0, info
         else :
-            return O_sol
+            return O0
 
 
 def model_error(amp, O, mask, background = 0):

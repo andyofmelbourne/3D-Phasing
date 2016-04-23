@@ -6,6 +6,7 @@ from utils import io_utils
 from utils.l2norm import l2norm
 from utils.progress_bar import update_progress
 from utils.support import shrinkwrap
+from utils.merge import merge_sols
 from src import projection_maps as pm
 from src import era
 from src import dm
@@ -26,42 +27,64 @@ def centre(array):
 def phase(I, support, params, good_pix = None, sample_known = None):
     if params['phasing']['support'] == 'highest_N':
         support = params['highest_N']['n']
-        print 'Will threshold the sample to the',support,'most intense pixels at each iteration'
 
-    x    = None
-    eMod = []
-
-    # Error reduction algorithm
-    #--------------------------
-    x, info = era.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, background = None, \
-              method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-              dtype = 'double', full_output = True)
-    eMod += info['eMod']
-
-    for i in range(params['phasing']['outerloop']):
+    # repeats
+    xs    = []
+    eMods = []
+    eCons = []
+    for j in range(params['phasing']['repeats']):
+        if params['phasing']['repeats'] > 1 :
+            print '\n\nLoop:', j
+            print '----------'
+            print '----------'
         
-        # Difference Map
-        #---------------
-        x, info = dm.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, background = None, \
-                  method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                  dtype = 'double', full_output = True)
-        eMod += info['eMod']
-        
+        x    = None
+        eMod = []
+        eCon = []
+
         # Error reduction algorithm
         #--------------------------
-        x, info = era.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, background = None, \
+        x, info = era.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, background = None, \
                   method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                  dtype = 'double', full_output = True)
+                  dtype = 'single', full_output = True)
         eMod += info['eMod']
+        eCon += info['eCon']
 
-    # Error reduction algorithm
-    #--------------------------
-    x, info = era.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, background = None, \
-              method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-              dtype = 'double', full_output = True)
-    eMod += info['eMod']
-    
-    return centre(x), info['I'], eMod, None
+        for i in range(params['phasing']['outerloop']):
+            
+            # Difference Map
+            #---------------
+            x, info = dm.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, background = None, \
+                      method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+                      dtype = 'single', full_output = True)
+            eMod += info['eMod']
+            eCon += info['eCon']
+            
+            # Error reduction algorithm
+            #--------------------------
+            x, info = era.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, background = None, \
+                      method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+                      dtype = 'single', full_output = True)
+            eMod += info['eMod']
+            eCon += info['eCon']
+
+        # Error reduction algorithm
+        #--------------------------
+        x, info = era.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, background = None, \
+                  method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
+                  dtype = 'single', full_output = True)
+        eMod += info['eMod']
+        eCon += info['eCon']
+
+        xs.append(centre(x))
+        eMods.append(eMod)
+        eCons.append(eCon)
+
+    if params['phasing']['repeats'] > 1 :
+        x  = merge_sols(np.array(xs))
+        info['I'] = np.abs(np.fft.fftn(x))**2
+        xs = [x]
+    return np.array(xs), info['I'], eMods, eCons
 
 
 if __name__ == "__main__":
@@ -70,9 +93,9 @@ if __name__ == "__main__":
     # read the h5 file
     diff, support, good_pix, sample_known, params = io_utils.read_input_h5(args.input)
     
-    sample_ret, diff_ret, emod, efid = phase(diff, support, params, \
+    samples_ret, diff_ret, emods, econs = phase(diff, support, params, \
                                 good_pix = good_pix, sample_known = sample_known)
     
     # write the h5 file 
     io_utils.write_output_h5(params['output']['path'], diff, diff_ret, support, \
-                    support, good_pix, sample_known, sample_ret, emod, efid)
+                    support, good_pix, sample_known, samples_ret, emods, econs, None)
