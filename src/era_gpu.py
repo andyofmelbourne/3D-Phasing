@@ -10,7 +10,9 @@ from   pyfft.cl import Plan
 import pyopencl.clmath 
 
 
-def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
+def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
+        method = None, hardware = 'cpu', alpha = 1.0e-10, \
+        dtype = 'single', queue = None, plan = None, full_output = True):
     """
     GPU variant of era.ERA
     """
@@ -43,19 +45,19 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
     #---------------
     if queue is None and plan is None :
         # get the CUDA platform
-        #print 'opencl platforms found:'
+        print 'opencl platforms found:'
         platforms = pyopencl.get_platforms()
         for p in platforms:
-            #print '\t', p.name
+            print '\t', p.name
             if p.name == 'NVIDIA CUDA':
                 platform = p
-                #print '\tChoosing', p.name
+                print '\tChoosing', p.name
 
         # get one of the gpu's device id
-        #print '\nopencl devices found:'
+        print '\nopencl devices found:'
         devices = platform.get_devices()
-        #for d in devices:
-        #    print '\t', d.name
+        for d in devices:
+            print '\t', d.name
 
         #print '\tChoosing', devices[0].name
         device = devices[0]
@@ -129,6 +131,8 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, method = N
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods
             info['eCon']  = eCons
+            info['queue'] = queue
+            info['plan']  = plan
             return O, info
         else :
             return O

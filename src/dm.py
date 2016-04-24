@@ -4,7 +4,7 @@ from itertools import product
 import era
 
 
-def DM(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', full_output = True):
+def DM(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
     
@@ -121,7 +121,7 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     """
     if hardware == 'gpu':
         from dm_gpu import DM_gpu
-        return DM_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, full_output)
+        return DM_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
     
     method = 1
     

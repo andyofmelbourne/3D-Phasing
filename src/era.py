@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 
-def ERA(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', full_output = True):
+def ERA(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
     
@@ -89,7 +89,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     """
     if hardware == 'gpu':
         from era_gpu import ERA_gpu
-        return ERA_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, full_output)
+        return ERA_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
     
     method = 1
     
