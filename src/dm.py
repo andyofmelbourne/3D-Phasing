@@ -211,7 +211,8 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O0))**2
             if background is not None :
-                info['background'] = background**2
+                background, rs, r_av = radial_symetry(background**2, rs = rs)
+                info['background'] = background
                 info['r_av']       = r_av
                 info['I']         += info['background']
             info['eMod']  = eMods
