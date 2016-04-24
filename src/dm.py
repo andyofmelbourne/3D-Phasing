@@ -148,6 +148,14 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     eMods     = []
     eCons     = []
     
+    if background is not None :
+        if background is True :
+            background = np.random.random((I.shape)).astype(dtype)
+        else :
+            background = np.sqrt(background)
+        b0 = background.copy()
+        rs = None
+    
     # method 1
     #---------
     if method == 1 :
@@ -167,9 +175,19 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
                 S = support
             O0 = O * S
             
-            O  -= O0
-            O0 -= O
-            O0  = era.pmod_1(amp, O0, mask, alpha = alpha)
+            if background is not None :
+                b0, rs, r_av = era.radial_symetry(background, rs = rs)
+            
+            O          -= O0
+            O0         -= O
+            # modulus projection 
+            if background is not None :
+                background -= b0
+                b0         -= background
+                O0, b0      = era.pmod_7(amp, b0, O0, mask, alpha = alpha)
+                background += b0
+            else :
+                O0 = era.pmod_1(amp, O0, mask, alpha = alpha)
             O  += O0
             
             # metrics
@@ -180,7 +198,7 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             
             # f* = Ps f_i = PM (2 Ps f_i - f_i)
             O0    = O * S
-            eMod  = model_error(amp, O0, mask, background = 0)
+            eMod  = model_error(amp, O0, mask, background = background)
             eMod  = np.sqrt( eMod / I_norm )
             
             era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
@@ -192,6 +210,10 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             info = {}
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O0))**2
+            if background is not None :
+                info['background'] = background**2
+                info['r_av']       = r_av
+                info['I']         += info['background']
             info['eMod']  = eMods
             info['eCon']  = eCons
             return O0, info
@@ -199,8 +221,11 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             return O0
 
 
-def model_error(amp, O, mask, background = 0):
+def model_error(amp, O, mask, background = None):
     O   = np.fft.fftn(O)
-    M   = np.sqrt((O.conj() * O).real + background**2)
+    if background is not None :
+        M   = np.sqrt((O.conj() * O).real + background**2)
+    else :
+        M   = np.sqrt((O.conj() * O).real)
     err = np.sum( mask * (M - amp)**2 ) 
     return err

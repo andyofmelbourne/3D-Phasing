@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # forward problem
     if params.has_key('simulation') and params['simulation']['sample'] == 'duck':
-        diff, beamstop, edges, support, solid_unit = duck.generate_diff(params)
+        diff, beamstop, background_circle, edges, support, solid_unit = duck.generate_diff(params)
         
         # write to file
         io_utils.write_input_h5(params['output']['path'], diff, support, \

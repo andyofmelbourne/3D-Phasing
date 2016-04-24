@@ -19,6 +19,14 @@ def generate_diff(config):
     else :
         edges = np.ones_like(diff, dtype=np.bool)
 
+    # add circle
+    if config['detector']['add_circle'] is not None :
+        #print 'adding circular background:'
+        background_circle = np.max(diff) * 0.1 * ~circle.make_beamstop(diff.shape, config['detector']['add_circle'])
+        diff += background_circle 
+    else :
+        background_circle = None
+
     # define the solid_unit support
     if config['sample']['support_frac'] is not None :
         support = support.expand_region_by(solid_unit_expanded > 0.1, config['sample']['support_frac'])
@@ -32,7 +40,7 @@ def generate_diff(config):
     else :
         beamstop = np.ones_like(diff, dtype=np.bool)
 
-    return diff, beamstop, edges, support, solid_unit_expanded
+    return diff, beamstop, background_circle, edges, support, solid_unit_expanded
 
 
 def interp_3d(array, shapeout):

@@ -117,7 +117,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
 
     if background is not None :
         if background is True :
-            background = np.random.random((I.shape)).astype(dtype) + 1.0e-5
+            background = np.random.random((I.shape)).astype(dtype)
+        else :
+            background = np.sqrt(background)
+        rs = None
 
     # method 1
     #---------
@@ -128,10 +131,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             O0 = O.copy()
             
             # modulus projection 
-            if background is None :
-                O = pmod_1(amp, O, mask, alpha = alpha)
+            if background is not None :
+                O, background  = pmod_7(amp, background, O, mask, alpha = alpha)
             else :
-                O, background = pmod_7(amp, background, O, mask, alpha = alpha)
+                O = pmod_1(amp, O, mask, alpha = alpha)
             
             O1 = O.copy()
             
@@ -141,6 +144,9 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             else :
                 S = support
             O = O * S
+
+            if background is not None :
+                background, rs, r_av = radial_symetry(background.copy(), rs = rs)
             
             # metrics
             O2 = O.copy()
@@ -162,80 +168,15 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             info = {}
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O))**2
+            if background is not None :
+                info['background'] = background**2
+                info['r_av']       = r_av
+                info['I']         += info['background']
             info['eMod']  = eMods
             info['eCon']  = eCons
             return O, info
         else :
             return O
-
-    # method 2
-    #---------
-    # update the object with background retrieval
-    elif method == 2 :
-        if background is None :
-            background = np.random.random((I.shape)).astype(dtype)
-        else :
-            temp       = np.empty(I.shape, dtype = dtype)
-            temp[:]    = np.sqrt(background)
-            background = temp
-        
-        print 'algrithm progress iteration convergence modulus error'
-        for i in range(iters) :
-            if update == 'O' : bak = O.copy()
-            if update == 'P' : bak = P.copy()
-            if update == 'OP': bak = np.hstack((O.ravel().copy(), P.ravel().copy()))
-            
-            E_bak        = exits.copy()
-            
-            # modulus projection 
-            exits, background  = pmod_7(amp, background, exits, mask, alpha = alpha)
-            
-            E_bak       -= exits
-            
-            # consistency projection 
-            if update == 'O': O, P_heatmap = psup_O_1(exits, P, R, O.shape, P_heatmap, alpha = alpha)
-            if update == 'P': P, O_heatmap = psup_P_1(exits, O, R, O_heatmap, alpha = alpha)
-            if update == 'OP':
-                for j in range(OP_iters):
-                    O, P_heatmap = psup_O_1(exits, P, R, O.shape, None, alpha = alpha)
-                    P, O_heatmap = psup_P_1(exits, O, R, None, alpha = alpha)
-
-            background[:] = np.mean(background, axis=0)
-            
-            exits = make_exits(O, P, R, exits)
-            
-            # metrics
-            if update == 'O' : temp = O
-            if update == 'P' : temp = P
-            if update == 'OP': temp = np.hstack((O.ravel(), P.ravel()))
-            
-            bak   -= temp
-            eCon   = np.sum( (bak * bak.conj()).real ) / np.sum( (temp * temp.conj()).real )
-            eCon   = np.sqrt(eCon)
-            
-            eMod   = np.sum( (E_bak * E_bak.conj()).real ) / I_norm
-            eMod   = np.sqrt(eMod)
-            
-            update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
-
-            eMods.append(eMod)
-            eCons.append(eCon)
-        
-        if full_output : 
-            info = {}
-            info['plan'] = info['queue'] = None
-            info['exits'] = exits
-            info['I']     = np.abs(np.fft.fftn(exits, axes = (-2, -1)))**2
-            info['eMod']  = eMods
-            info['eCon']  = eCons
-            info['heatmap']  = P_heatmap
-            if update == 'O' : return O, background**2, info
-            if update == 'P' : return P, background**2, info
-            if update == 'OP': return O, P, background**2, info
-        else :
-            if update == 'O':  return O, background**2
-            if update == 'P':  return P, background**2
-            if update == 'OP': return O, P, background**2
 
 
 def update_progress(progress, algorithm, i, emod, esup):
@@ -274,9 +215,9 @@ def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
     return O
     
 def Pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
-    O  = mask * O * amp / (abs(O) + alpha)
-    O += (1 - mask) * O
-    return O
+    out  = mask * O * amp / (abs(O) + alpha)
+    out += (1 - mask) * O
+    return out
 
 def pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
     O = np.fft.fftn(O)
@@ -286,8 +227,34 @@ def pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
     
 def Pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
     M = mask * amp / np.sqrt((O.conj() * O).real + background**2 + alpha)
-    O      *= M
+    out         = O * M
     background *= M
-    O += (1 - mask) * O
-    return O, background
+    out += (1 - mask) * O
+    return out, background
 
+def radial_symetry(background, rs = None, is_fft_shifted = True):
+    if rs is None :
+        i = np.fft.fftfreq(background.shape[0]) * background.shape[0]
+        j = np.fft.fftfreq(background.shape[1]) * background.shape[1]
+        k = np.fft.fftfreq(background.shape[2]) * background.shape[2]
+        i, j, k = np.meshgrid(i, j, k, indexing='ij')
+        rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16)
+        
+        if is_fft_shifted is False :
+            rs = np.fft.fftshift(rs)
+        rs = rs.ravel()
+    
+    ########### Find the radial average
+    # get the r histogram
+    r_hist = np.bincount(rs)
+    # get the radial total 
+    r_av = np.bincount(rs, background.ravel())
+    # prevent divide by zero
+    nonzero = np.where(r_hist != 0)
+    # get the average
+    r_av[nonzero] = r_av[nonzero] / r_hist[nonzero].astype(r_av.dtype)
+
+    ########### Make a large background filled with the radial average
+    background = r_av[rs].reshape(background.shape)
+    return background, rs, r_av
+    

@@ -43,6 +43,13 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, \
     eMods     = []
     eCons     = []
 
+    if background is not None :
+        if background is True :
+            background = np.random.random((I.shape)).astype(dtype)
+        else :
+            background = np.sqrt(background)
+        rs = None
+
     # set up the gpu
     #---------------
     #---------------
@@ -89,6 +96,10 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, \
         mask_g  = 1
         mask2_g = 1
     
+    if background is not None :
+        background_g = pyopencl.array.to_device(queue, np.ascontiguousarray(background))
+        b0           = background_g.copy()
+
     # method 1
     #---------
     if method == 1 :
@@ -107,10 +118,21 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, \
                 support_g.set(S.astype(np.int8))
             
             O0 = O_g * support_g
+
+            if background is not None :
+                background, rs, r_av = era.radial_symetry(background_g.get(), rs = rs)
+                b0.set(background)
             
             O_g  -= O0
             O0   -= O_g
-            O0    = era_gpu.pmod_gpu(amp_g, O0, plan, mask2_g, alpha = alpha)
+            # modulus projection 
+            if background is not None :
+                background_g -= b0
+                b0           -= background_g
+                O0, b0        = era_gpu.pmod_back_gpu(amp_g, b0, O0, plan, mask_g, alpha = alpha)
+                background_g += b0
+            else :
+                O0    = era_gpu.pmod_gpu(amp_g, O0, plan, mask2_g, alpha = alpha)
             O_g  += O0
             
             # metrics
@@ -138,6 +160,10 @@ def DM_gpu(I, iters, support, mask = 1, O = None, background = None, \
         if full_output : 
             info = {}
             info['I']     = np.abs(np.fft.fftn(O))**2
+            if background is not None :
+                info['background'] = background**2
+                info['r_av']       = r_av
+                info['I']         += info['background']
             info['eMod']  = eMods
             info['eCon']  = eCons
             info['queue'] = queue

@@ -87,7 +87,7 @@ def rad_av(diff, rs = None, is_fft_shifted = True):
         rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16).ravel()
         
         if is_fft_shifted is False :
-            rs = np.fft.ifftshift(rs)
+            rs = np.fft.fftshift(rs)
     
     ########### Find the radial average
     # get the r histogram

@@ -40,6 +40,13 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
     eMods     = []
     eCons     = []
 
+    if background is not None :
+        if background is True :
+            background = np.random.random((I.shape)).astype(dtype)
+        else :
+            background = np.sqrt(background)
+        rs = None
+
     # set up the gpu
     #---------------
     #---------------
@@ -83,6 +90,9 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
     else :
         mask_g  = 1
 
+    if background is not None :
+        background_g = pyopencl.array.to_device(queue, np.ascontiguousarray(background))
+
     O_sol = None
     # method 1
     #---------
@@ -93,7 +103,10 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
             O0 = O_g.copy()
             
             # modulus projection 
-            O = pmod_gpu(amp_g, O_g, plan, mask_g, alpha = alpha)
+            if background is not None :
+                O_g, background_g  = pmod_back_gpu(amp_g, background_g, O_g, plan, mask_g, alpha = alpha)
+            else :
+                O_g = pmod_gpu(amp_g, O_g, plan, mask_g, alpha = alpha)
             
             O1 = O_g.copy()
             
@@ -102,6 +115,10 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
                 S = era.choose_N_highest_pixels( (O_g * O_g.conj()).real.get(), support)
                 support_g.set(S.astype(np.int8))
             O_g = O_g * support_g
+            
+            if background is not None :
+                background, rs, r_av = era.radial_symetry(background_g.get(), rs = rs)
+                background_g.set(background)
             
             # metrics
             O2 = O_g.copy()
@@ -129,6 +146,10 @@ def ERA_gpu(I, iters, support, mask = 1, O = None, background = None, \
         if full_output : 
             info = {}
             info['I']     = np.abs(np.fft.fftn(O))**2
+            if background is not None :
+                info['background'] = background**2
+                info['r_av']       = r_av
+                info['I']         += info['background']
             info['eMod']  = eMods
             info['eCon']  = eCons
             info['queue'] = queue
@@ -154,10 +175,20 @@ def Pmod_gpu(amp, O, mask = 1, alpha = 1.0e-10):
         #exits.mul_add(mask * amp / (abs(exits) + alpha), (1 - mask), exits)
     return O
 
-def choose_N_highest_pixels(array, N, sorter):
-    # sort the array
-    a  = np.random.random((10,))
-    sgs, evt = sorter(a)
-    print sgs.get()
-    import sys
-    sys.exit()
+def pmod_back_gpu(amp, background, O, plan, mask = 1, alpha = 1.0e-10):
+    plan.execute(O.data)
+    O, background = Pmod_back_gpu(amp, background, O, mask = mask, alpha = alpha)
+    plan.execute(O.data, inverse = True)
+    return O, background
+    
+def Pmod_back_gpu(amp, background, O, mask = 1, alpha = 1.0e-10):
+    M = amp / pyopencl.clmath.sqrt((O.conj() * O).real + background**2 + alpha)
+    if mask is 1 :
+        O          *= M
+        background *= M
+    else :
+        M *= mask
+        O2 = O * M
+        background *= M
+        pyopencl.array.if_positive(mask, O2, O, out = O)
+    return O, background
