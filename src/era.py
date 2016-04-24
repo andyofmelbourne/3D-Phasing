@@ -115,6 +115,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     eMods     = []
     eCons     = []
 
+    if background is not None :
+        if background is True :
+            background = np.random.random((I.shape)).astype(dtype) + 1.0e-5
+
     # method 1
     #---------
     if method == 1 :
@@ -124,7 +128,10 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             O0 = O.copy()
             
             # modulus projection 
-            O = pmod_1(amp, O, mask, alpha = alpha)
+            if background is None :
+                O = pmod_1(amp, O, mask, alpha = alpha)
+            else :
+                O, background = pmod_7(amp, background, O, mask, alpha = alpha)
             
             O1 = O.copy()
             
@@ -271,16 +278,16 @@ def Pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
     O += (1 - mask) * O
     return O
 
-def pmod_7(amp, background, exits, mask = 1, alpha = 1.0e-10):
-    exits = np.fft.fftn(exits, axes = (-2, -1))
-    exits, background = Pmod_7(amp, background, exits, mask = mask, alpha = alpha)
-    exits = np.fft.ifftn(exits, axes = (-2, -1))
-    return exits, background
+def pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
+    O = np.fft.fftn(O)
+    O, background = Pmod_7(amp, background, O, mask = mask, alpha = alpha)
+    O = np.fft.ifftn(O)
+    return O, background
     
-def Pmod_7(amp, background, exits, mask = 1, alpha = 1.0e-10):
-    M = mask * amp / np.sqrt((exits.conj() * exits).real + background**2 + alpha)
-    exits      *= M
+def Pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
+    M = mask * amp / np.sqrt((O.conj() * O).real + background**2 + alpha)
+    O      *= M
     background *= M
-    exits += (1 - mask) * exits
-    return exits, background
+    O += (1 - mask) * O
+    return O, background
 
