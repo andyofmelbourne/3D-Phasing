@@ -63,14 +63,16 @@ def merge_sols(Os):
             Os[i] = Ot
 
     O = np.sum(Os, axis = 0) / float(Os.shape[0])
-    return O
 
-def tranmission(Os):
-    Os = np.fft.fftn(Os, axis = (1,2,3))
+    T, rav_T = transmission(Os)
+    return O, T, rav_T
+
+def transmission(Os):
+    Os = np.fft.fftn(Os, axes = (-3,-2,-1))
     Os = np.angle(Os)
-    T  = np.average(np.exp(1J * Os))
-    T  = rad_av(T, is_fft_shifted = True)
-    return T
+    T  = np.abs(np.average(np.exp(1J * Os), axis=0))
+    rav_T = rad_av(T, is_fft_shifted = True)
+    return T, rav_T
 
 def radial_average_from_sol(O):
     Oh = np.fft.fftn(O)

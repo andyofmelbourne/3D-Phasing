@@ -83,7 +83,7 @@ def parse_cmdline_args_phasing():
 
 
 def write_output_h5(path, diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_units_ret, emods, econs, efids):
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids, T, T_rav):
     import os, h5py
     fnam = os.path.join(path, 'output.h5')
     if_exists_del(fnam)
@@ -106,6 +106,9 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
         f.create_dataset('fidelity error', chunks = emods.shape, data = -np.ones_like(emods), compression='gzip')
     f.create_dataset('sample init', chunks = solid_unit.shape, data = solid_unit, compression='gzip')
     f.create_dataset('sample retrieved', chunks = (1,) + solid_units_ret.shape[1 :], data = solid_units_ret, compression='gzip')
+    if T is not None and T_rav is not None :
+        f.create_dataset('transmission', chunks = T.shape, data = T, compression='gzip')
+        f.create_dataset('transmission radial average', chunks = T_rav.shape, data = T_rav, compression='gzip')
 
     # read the config file and dump it into the h5 file
     """
@@ -132,23 +135,17 @@ def read_output_h5(path):
     efids           = f['fidelity error'].value
     solid_unit      = f['sample init'].value
     solid_units_ret = f['sample retrieved'].value
+    if 'transmission' in f.keys():
+        T               = f['transmission'].value
+        T_rav           = f['transmission radial average'].value
+    else :
+        T = T_rav = None
     #config_file    = f['config file'].value
 
     f.close()
-
-    # read then pass the config file
-    """
-    import ConfigParser
-    import StringIO
-    config_file = StringIO.StringIO(config_file)
-
-    config = ConfigParser.ConfigParser()
-    config.readfp(config_file)
-    params = parse_parameters(config)
-    """
     
     return diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_units_ret, emods, econs, efids
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids, T, T_rav
 
 
 def write_input_h5(path, diff, support, good_pix, solid_known, config):

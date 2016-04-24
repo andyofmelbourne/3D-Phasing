@@ -190,6 +190,7 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
         
         if full_output : 
             info = {}
+            info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O0))**2
             info['eMod']  = eMods
             info['eCon']  = eCons

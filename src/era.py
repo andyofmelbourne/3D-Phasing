@@ -153,6 +153,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         
         if full_output : 
             info = {}
+            info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O))**2
             info['eMod']  = eMods
             info['eCon']  = eCons
@@ -215,6 +216,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         
         if full_output : 
             info = {}
+            info['plan'] = info['queue'] = None
             info['exits'] = exits
             info['I']     = np.abs(np.fft.fftn(exits, axes = (-2, -1)))**2
             info['eMod']  = eMods

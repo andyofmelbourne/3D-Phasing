@@ -58,7 +58,7 @@ class Application():
 
     def __init__(self, diff, diff_ret, support, support_ret, \
                  good_pix, solid_unit, solid_units_ret,       \
-                 emods, econs, efids):
+                 emods, econs, efids, T, T_rav):
         
         solid_unit_ret = np.fft.ifftshift(solid_units_ret[0].real)
         duck_plots = (np.sum(solid_unit_ret, axis=0),\
@@ -144,6 +144,44 @@ class Application():
         
         ## Display the widget as a new window
         w.show()
+
+        
+        ## Show the transmission plots
+        T_plots = np.hstack((np.fft.ifftshift(T[0, :, :]), \
+                             np.fft.ifftshift(T[:, 0, :]), \
+                             np.fft.ifftshift(T[:, :, 0])))
+
+        # Define a top-level widget to hold everything
+        w2 = QtGui.QWidget()
+
+        # 2D slices for the transmission
+        self.T_plots = pg.ImageView()
+        
+        # line plots of the T_rav
+        self.plot_T_rav = pg.PlotWidget()
+
+        Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+
+        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter.addWidget(self.plot_T_rav)
+        Vsplitter.addWidget(Hsplitter)
+
+        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter.addWidget(self.T_plots)
+        Vsplitter.addWidget(Hsplitter)
+        
+        hlayout_tot = QtGui.QHBoxLayout()
+        hlayout_tot.addWidget(Vsplitter)
+
+        w2.setLayout(hlayout_tot)
+        
+        self.T_plots.setImage(T_plots.T)
+        
+        self.plot_T_rav.plot(T_rav)
+        self.plot_T_rav.setTitle('radial average of the transmission')
+        
+        ## Display the widget as a new window
+        w2.show()
 
         ## Start the Qt event loop
         app.exec_()
@@ -244,11 +282,11 @@ if __name__ == '__main__':
         # read the h5 file 
         diff, diff_ret, support, support_ret, \
         good_pix, solid_unit, solid_units_ret, \
-        emods, econs, efids                      = io_utils.read_output_h5(args.path)
+        emods, econs, efids, T, T_rav           = io_utils.read_output_h5(args.path)
 
         ex  = Application(diff, diff_ret, support, support_ret, \
                           good_pix, solid_unit, solid_units_ret, \
-                          emods, econs, efids)
+                          emods, econs, efids, T, T_rav)
     
     signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
     app = QtGui.QApplication(sys.argv)
