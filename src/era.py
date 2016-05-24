@@ -88,8 +88,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     --------
     """
     if hardware == 'gpu':
-        from era_gpu import ERA_gpu
-        return ERA_gpu(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
+        import era_afnumpy 
+        return era_afnumpy.ERA(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
     
     method = 1
     
