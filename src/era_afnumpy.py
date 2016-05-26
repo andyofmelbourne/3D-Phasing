@@ -3,7 +3,7 @@ import afnumpy
 import afnumpy.fft
 import sys
 
-afnumpy.arrayfire.set_device(2)
+afnumpy.arrayfire.set_device(0)
 
 def ERA(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
