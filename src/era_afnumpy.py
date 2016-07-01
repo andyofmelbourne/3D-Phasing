@@ -1,5 +1,9 @@
 import numpy as np
+import afnumpy
+import afnumpy.fft
 import sys
+
+afnumpy.arrayfire.set_device(0)
 
 def ERA(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
@@ -87,10 +91,6 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     Examples 
     --------
     """
-    if hardware == 'gpu':
-        import era_afnumpy 
-        return era_afnumpy.ERA(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
-    
     method = 1
     
     if dtype is None :
@@ -121,6 +121,14 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
         else :
             background = np.sqrt(background)
         rs = None
+        background = afnumpy.array(background)
+
+    # send arrays to the gpu
+    amp = afnumpy.array(amp)
+    O   = afnumpy.array(O)
+    mask = afnumpy.array(mask)
+    support = afnumpy.array(support)
+
 
     # method 1
     #---------
@@ -132,6 +140,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             
             # modulus projection 
             if background is not None :
+                #print 'background'
                 O, background  = pmod_7(amp, background, O, mask, alpha = alpha)
             else :
                 O = pmod_1(amp, O, mask, alpha = alpha)
@@ -140,24 +149,28 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             
             # support projection 
             if type(support) is int :
+                print 'highest N'
                 S = choose_N_highest_pixels( (O * O.conj()).real, support)
+                S = afnumpy.array(choose_N_highest_pixels( (O * O.conj()).real, support))
             else :
                 S = support
             O = O * S
 
             if background is not None :
-                background, rs, r_av = radial_symetry(background.copy(), rs = rs)
+                #print 'background'
+                background, rs, r_av = radial_symetry(np.array(background), rs = rs)
+                background = afnumpy.array(background)
             
             # metrics
             O2 = O.copy()
             
             O2    -= O0
-            eCon   = np.sum( (O2 * O2.conj()).real ) / np.sum( (O0 * O0.conj()).real )
-            eCon   = np.sqrt(eCon)
+            eCon   = afnumpy.sum( (O2 * O2.conj()).real ) / afnumpy.sum( (O0 * O0.conj()).real )
+            eCon   = afnumpy.sqrt(eCon)
             
             O1    -= O0
-            eMod   = np.sum( (O1 * O1.conj()).real ) / I_norm
-            eMod   = np.sqrt(eMod)
+            eMod   = afnumpy.sum( (O1 * O1.conj()).real ) / I_norm
+            eMod   = afnumpy.sqrt(eMod)
             
             update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
             
@@ -165,6 +178,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             eCons.append(eCon)
         
         if full_output : 
+            O = np.array(O)
             info = {}
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O))**2
@@ -210,30 +224,59 @@ def choose_N_highest_pixels(array, N):
     return support
 
 def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
-    O = np.fft.fftn(O)
+    O = afnumpy.fft.fftn(O)
     O = Pmod_1(amp, O, mask = mask, alpha = alpha)
-    O = np.fft.ifftn(O)
+    O = afnumpy.fft.ifftn(O)
     return O
     
 def Pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
-    out  = mask * O * amp / (abs(O) + alpha)
+    out  = mask * O * amp / (afnumpy.abs(O) + alpha)
     out += (1 - mask) * O
     return out
 
 def pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
-    O = np.fft.fftn(O)
+    O = afnumpy.fft.fftn(O)
     O, background = Pmod_7(amp, background, O, mask = mask, alpha = alpha)
-    O = np.fft.ifftn(O)
+    O = afnumpy.fft.ifftn(O)
     return O, background
     
 def Pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
-    M = mask * amp / np.sqrt((O.conj() * O).real + background**2 + alpha)
+    M = mask * amp / afnumpy.sqrt((O.conj() * O).real + background**2 + alpha)
     out         = O * M
     background *= M
     out += (1 - mask) * O
     return out, background
 
 def radial_symetry(background, rs = None, is_fft_shifted = True):
+    """
+    Use arrayfire's histogram to calculate the radial averages.
+    """
+    if rs is None :
+        i = np.fft.fftfreq(background.shape[0]) * background.shape[0]
+        j = np.fft.fftfreq(background.shape[1]) * background.shape[1]
+        k = np.fft.fftfreq(background.shape[2]) * background.shape[2]
+        i, j, k = np.meshgrid(i, j, k, indexing='ij')
+        rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16)
+        
+        if is_fft_shifted is False :
+            rs = np.fft.fftshift(rs)
+        rs = rs.ravel()
+    
+    ########### Find the radial average
+    # get the r histogram
+    r_hist = np.bincount(rs)
+    # get the radial total 
+    r_av = np.bincount(rs, background.ravel())
+    # prevent divide by zero
+    nonzero = np.where(r_hist != 0)
+    # get the average
+    r_av[nonzero] = r_av[nonzero] / r_hist[nonzero].astype(r_av.dtype)
+
+    ########### Make a large background filled with the radial average
+    background = r_av[rs].reshape(background.shape)
+    return background, rs, r_av
+
+def _radial_symetry(background, rs = None, is_fft_shifted = True):
     if rs is None :
         i = np.fft.fftfreq(background.shape[0]) * background.shape[0]
         j = np.fft.fftfreq(background.shape[1]) * background.shape[1]
