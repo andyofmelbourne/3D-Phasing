@@ -1,3 +1,3 @@
-from src import era
-from src import dm
+from src.era import ERA
+from src.dm import DM
 import utils

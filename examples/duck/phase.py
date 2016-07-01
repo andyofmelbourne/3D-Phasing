@@ -1,16 +1,8 @@
 import numpy as np
 import sys, os
 
-sys.path.append(os.path.abspath('.'))
-from utils import io_utils
-from utils.l2norm import l2norm
-from utils.progress_bar import update_progress
-from utils.support import shrinkwrap
-from utils.merge import merge_sols
-from utils import circle 
-from src import projection_maps as pm
-from src import era
-from src import dm
+import phasing_3d
+import phasing_3d.utils as utils
 
 def centre(array):
     # get the centre of mass of |P|^2
@@ -53,7 +45,7 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         # Error reduction algorithm
         #--------------------------
         if params['phasing']['era_init'] > 0 :
-            x, info = era.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, \
+            x, info = phasing_3d.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, \
                       background = background, \
                       method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
                       dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
@@ -67,7 +59,7 @@ def phase(I, support, params, good_pix = None, sample_known = None):
             # Difference Map
             #---------------
             if params['phasing']['dm'] > 0 :
-                x, info = dm.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, \
+                x, info = phasing_3d.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, \
                           background = background, \
                           method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
                           dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
@@ -79,7 +71,7 @@ def phase(I, support, params, good_pix = None, sample_known = None):
             # Error reduction algorithm
             #--------------------------
             if params['phasing']['era'] > 0 :
-                x, info = era.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, \
+                x, info = phasing_3d.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, \
                           background = background, \
                           method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
                           dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
@@ -91,7 +83,7 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         # Error reduction algorithm
         #--------------------------
         if params['phasing']['era_final'] > 0 :
-            x, info = era.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, \
+            x, info = phasing_3d.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, \
                       background = background, \
                       method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
                       dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
@@ -124,14 +116,14 @@ def phase(I, support, params, good_pix = None, sample_known = None):
 
 
 if __name__ == "__main__":
-    args = io_utils.parse_cmdline_args_phasing()
+    args = utils.io_utils.parse_cmdline_args_phasing()
     
     # read the h5 file
-    diff, support, good_pix, sample_known, params = io_utils.read_input_h5(args.input)
+    diff, support, good_pix, sample_known, params = utils.io_utils.read_input_h5(args.input)
     
     samples_ret, diff_ret, emods, econs, T, T_rav, B_rav = phase(diff, support, params, \
                                 good_pix = good_pix, sample_known = sample_known)
     
     # write the h5 file 
-    io_utils.write_output_h5(params['output']['path'], diff, diff_ret, support, \
+    utils.io_utils.write_output_h5(params['output']['path'], diff, diff_ret, support, \
                     support, good_pix, sample_known, samples_ret, emods, econs, None, T, T_rav, B_rav)

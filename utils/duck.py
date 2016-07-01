@@ -2,6 +2,7 @@ import numpy as np
 import noise
 import support
 import circle
+import os
 
 def generate_diff(config):
     solid_unit = make_3D_duck(shape = config['sample']['shape'])
@@ -61,8 +62,10 @@ def interp_3d(array, shapeout):
     
 
 def make_3D_duck(shape = (12, 25, 30)):
+    fnam = os.path.dirname(os.path.realpath(__file__))
+    fnam = os.path.join(fnam, 'duck_300_211_8bit.raw')
     # call in a low res 2d duck image
-    duck = np.fromfile('utils/duck_300_211_8bit.raw', dtype=np.int8).reshape((211, 300))
+    duck = np.fromfile(fnam, dtype=np.int8).reshape((211, 300))
     
     # convert to bool
     duck = duck < 50
