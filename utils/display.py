@@ -7,6 +7,50 @@ import sys
 
 import io_utils
 
+def crop_to_nonzero(arrayin, mask=None):
+    """Crop arrayin to the smallest rectangle that contains all of the non-zero elements and return the result. If mask is given use that to determine non-zero elements.
+    
+    If arrayin is a list of arrays then all arrays are cropped according to the first in the list."""
+
+    if type(arrayin) == np.ndarray :
+        array = arrayin
+    elif type(arrayin) == list :
+        array = arrayin[0]
+
+    if mask==None :
+        mask = array
+    #most left point 
+    for i in range(mask.shape[1]):
+        tot = np.sum(np.abs(mask[:,i]))
+        if tot > 0.0 :
+            break
+    left = i
+    #most right point 
+    for i in range(mask.shape[1]-1,-1,-1):
+        tot = np.sum(np.abs(mask[:,i]))
+        if tot > 0.0 :
+            break
+    right = i
+    #most up point 
+    for i in range(mask.shape[0]):
+        tot = np.sum(np.abs(mask[i,:]))
+        if tot > 0.0 :
+            break
+    top = i
+    #most down point
+    for i in range(mask.shape[0]-1,-1,-1):
+        tot = np.sum(np.abs(mask[i,:]))
+        if tot > 0.0 :
+            break
+    bottom = i
+    if type(arrayin) == np.ndarray :
+        arrayout = array[top:bottom+1,left:right+1]
+    elif type(arrayin) == list :
+        arrayout = []
+        for i in arrayin :
+            arrayout.append(i[top:bottom+1,left:right+1])
+    return arrayout
+
 def show_vol(map_3d):
     import pyqtgraph.opengl as gl
     signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
@@ -61,9 +105,11 @@ class Application():
                  emods, econs, efids, T, T_rav, B_rav):
         
         solid_unit_ret = np.fft.ifftshift(solid_units_ret[0].real)
-        duck_plots = (np.sum(solid_unit_ret, axis=0),\
+
+        duck_plots = [np.sum(solid_unit_ret, axis=0),\
                       np.sum(solid_unit_ret, axis=1),\
-                      np.sum(solid_unit_ret, axis=2))
+                      np.sum(solid_unit_ret, axis=2)]
+        duck_plots = crop_to_nonzero(duck_plots)
         duck_plots = np.hstack(np.abs(duck_plots))
 
         support_ret   = np.fft.ifftshift(support_ret)
@@ -201,6 +247,9 @@ class Application():
             hlayout_tot.addWidget(Vsplitter)
 
             w3.setLayout(hlayout_tot)
+            
+            # clip B_rav for log viewing
+            B_rav[B_rav == 0] = B_rav[B_rav > 0].min()*0.1
             
             self.plot_B_rav.plot(B_rav)
             self.plot_B_rav.setTitle('radial average of the background')
