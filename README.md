@@ -8,7 +8,7 @@ $ git clone https://github.com/andyofmelbourne/3D-Phasing.git ~/.local/lib/pytho
 
 ## Example command line
 A basic example with a 3D duck:
-```
+```bash
 $ cp -r ~/.local/lib/python2.7/site-packages/phasing_3d/examples .
 $ cp ~/.local/lib/python2.7/site-packages/phasing_3d/reconstruct.py .
 $ python reconstruct.py examples/duck/config.ini
