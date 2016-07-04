@@ -21,7 +21,7 @@ $ python ~/.local/lib/python2.7/site-packages/phasing_3d/utils/display.py exampl
 
 ## Example python 
 Of course the above is all just padding around:
-```
+```python
 import phasing_3d
 import numpy as np
 O = np.random.random((64,64,64))
