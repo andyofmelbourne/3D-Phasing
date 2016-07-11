@@ -127,7 +127,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     amp = afnumpy.array(amp)
     O   = afnumpy.array(O)
     mask = afnumpy.array(mask)
-    support = afnumpy.array(support)
+    if type(support) is not int :
+        support = afnumpy.array(support)
 
 
     # method 1
@@ -149,9 +150,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             
             # support projection 
             if type(support) is int :
-                print 'highest N'
-                S = choose_N_highest_pixels( (O * O.conj()).real, support)
-                S = afnumpy.array(choose_N_highest_pixels( (O * O.conj()).real, support))
+                S = afnumpy.array(choose_N_highest_pixels( np.array((O * O.conj()).real), support))
+                #S = choose_N_highest_pixels_afnumpy( (O * O.conj()).real, support)
             else :
                 S = support
             O = O * S
@@ -187,6 +187,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
                 info['background'] = background
                 info['r_av']       = r_av
                 info['I']         += info['background']
+            info['support'] = np.array(S)
             info['eMod']  = eMods
             info['eCon']  = eCons
             return O, info
@@ -222,6 +223,35 @@ def choose_N_highest_pixels(array, N):
     # print 'intensity threshold:', thresh
     # print 'number of pixels in support:', np.sum(support)
     return support
+
+def choose_N_highest_pixels_afnumpy(array, N, tol = 1.0e-5, maxIters=1000):
+    """
+    Use bisection to find the root of
+    e(x) = \sum_i (array_i > x) - N
+
+    then return (array_i > x) a boolean mask
+
+    This is faster than using percentile (surprising)
+    """
+    s0 = array.max()
+    s1 = array.min()
+    
+    for i in range(maxIters):
+        s = (s0 + s1) / 2.
+        e = afnumpy.sum(array > s) - N
+    
+        if np.abs(e) < tol :
+            break
+
+        if e < 0 :
+            s0 = s
+        else :
+            s1 = s
+        
+    support = array > s
+    #print 'number of pixels in support:', afnumpy.sum(support), i, s, e, type(support)
+    return support
+
 
 def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
     O = afnumpy.fft.fftn(O)

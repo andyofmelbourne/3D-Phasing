@@ -112,7 +112,7 @@ def phase(I, support, params, good_pix = None, sample_known = None):
     else :
         r_av = None
     
-    return np.array(xs), info['I'], eMods, eCons, info['transmission'], info['transmission radial average'], r_av
+    return np.array(xs), info['I'], info['support'], eMods, eCons, info['transmission'], info['transmission radial average'], r_av
 
 
 if __name__ == "__main__":
@@ -121,9 +121,9 @@ if __name__ == "__main__":
     # read the h5 file
     diff, support, good_pix, sample_known, params = utils.io_utils.read_input_h5(args.input)
     
-    samples_ret, diff_ret, emods, econs, T, T_rav, B_rav = phase(diff, support, params, \
+    samples_ret, diff_ret, support_ret, emods, econs, T, T_rav, B_rav = phase(diff, support, params, \
                                 good_pix = good_pix, sample_known = sample_known)
     
     # write the h5 file 
     utils.io_utils.write_output_h5(params['output']['path'], diff, diff_ret, support, \
-                    support, good_pix, sample_known, samples_ret, emods, econs, None, T, T_rav, B_rav)
+                    support_ret, good_pix, sample_known, samples_ret, emods, econs, None, T, T_rav, B_rav)

@@ -12,20 +12,19 @@ import sys, os
 import ConfigParser
 import subprocess
 
-sys.path.append('.')
-from utils import io_utils
-from utils import duck
+import phasing_3d
+from phasing_3d import utils
 
 
 if __name__ == "__main__":
     # Load the config file
     #--------------------------------------
-    args = io_utils.parse_cmdline_args()
+    args = utils.io_utils.parse_cmdline_args()
     
     config = ConfigParser.ConfigParser()
     config.read(args.config)
     
-    params = io_utils.parse_parameters(config)
+    params = utils.io_utils.parse_parameters(config)
     
     # make input 
     #--------------------------------------
@@ -37,10 +36,10 @@ if __name__ == "__main__":
     # forward problem
     #--------------------------------------
     if params.has_key('simulation') and params['simulation']['sample'] == 'duck':
-        diff, beamstop, background_circle, edges, support, solid_unit = duck.generate_diff(params)
+        diff, beamstop, background_circle, edges, support, solid_unit = utils.duck.generate_diff(params)
         
         # write to file
-        io_utils.write_input_h5(params['output']['path'], diff, support, \
+        utils.io_utils.write_input_h5(params['output']['path'], diff, support, \
                 beamstop * edges, solid_unit, args.config)
     
     # inverse problem

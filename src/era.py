@@ -173,6 +173,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
                 info['background'] = background
                 info['r_av']       = r_av
                 info['I']         += info['background']
+            info['support']    = S
             info['eMod']  = eMods
             info['eCon']  = eCons
             return O, info
@@ -199,7 +200,7 @@ def update_progress(progress, algorithm, i, emod, esup):
     sys.stdout.write(text)
     sys.stdout.flush()
 
-def choose_N_highest_pixels(array, N):
+def choose_N_highest_pixels_slow(array, N):
     percent = (1. - float(N) / float(array.size)) * 100.
     thresh  = np.percentile(array, percent)
     support = array > thresh
@@ -207,6 +208,34 @@ def choose_N_highest_pixels(array, N):
     # print 'percentile         :', percent, '%'
     # print 'intensity threshold:', thresh
     # print 'number of pixels in support:', np.sum(support)
+    return support
+
+def choose_N_highest_pixels(array, N, tol = 1.0e-5, maxIters=1000):
+    """
+    Use bisection to find the root of
+    e(x) = \sum_i (array_i > x) - N
+
+    then return (array_i > x) a boolean mask
+
+    This is faster than using percentile (surprising)
+    """
+    s0 = array.max()
+    s1 = array.min()
+
+    for i in range(maxIters):
+        s = (s0 + s1) / 2.
+        e = np.sum(array > s) - N
+    
+        if np.abs(e) < tol :
+            break
+
+        if e < 0 :
+            s0 = s
+        else :
+            s1 = s
+        
+    support = array > s
+    #print 'number of pixels in support:', np.sum(support), i, s, e
     return support
 
 def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):

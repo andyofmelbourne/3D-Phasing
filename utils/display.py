@@ -324,7 +324,7 @@ class Show_input():
         w.show()
 
         ## Start the Qt event loop
-        app.exec_()
+        sys.exit(app.exec_())
         
 def parse_cmdline_args():
     import argparse
@@ -344,6 +344,8 @@ def parse_cmdline_args():
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
+    
     args = parse_cmdline_args()
     
     if args.inout == 'input':
@@ -362,7 +364,3 @@ if __name__ == '__main__':
                           good_pix, solid_unit, solid_units_ret, \
                           emods, econs, efids, T, T_rav, B_rav)
     
-    signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
-    app = QtGui.QApplication(sys.argv)
-
-    sys.exit(app.exec_())
