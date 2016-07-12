@@ -30,8 +30,8 @@ S = np.zeros(O.shape, dtype=np.bool)
 S[:16,:16,:16] = True
 O *= S
 I = np.abs(np.fft.fftn(O))**2
-Oout, info = phasing_3d.DM(I, 100, S)
-Oout, info = phasing_3d.ERA(I, 100, S, O = Oout)
+Oout, info = phasing_3d.DM(I, 100, support = S)
+Oout, info = phasing_3d.ERA(I, 100, support = S, O = Oout)
 ```
 
 Try it yourself, just copy the above text then:

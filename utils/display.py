@@ -104,8 +104,15 @@ class Application():
                  good_pix, solid_unit, solid_units_ret,       \
                  emods, econs, efids, T, T_rav, B_rav):
         
-        solid_unit_ret = np.fft.ifftshift(solid_units_ret[0].real)
-
+        if len(solid_units_ret.shape) == 4 :
+            solid_unit_ret = solid_units_ret[0].real
+        else :
+            solid_unit_ret = solid_units_ret.real
+            emods = [emods]
+            econs = [econs]
+            
+        solid_unit_ret = np.fft.ifftshift(solid_unit_ret)
+        
         duck_plots = [np.sum(solid_unit_ret, axis=0),\
                       np.sum(solid_unit_ret, axis=1),\
                       np.sum(solid_unit_ret, axis=2)]

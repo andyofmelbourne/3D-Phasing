@@ -1,106 +1,69 @@
 import numpy as np
 import sys, os
+import re
+import copy
 
 import phasing_3d
 import phasing_3d.utils as utils
 
+def config_iters_to_alg_num(string):
+    # split a string like '100ERA 200DM 50ERA' with the numbers
+    steps = re.split('(\d+)', string)   # ['', '100', 'ERA ', '200', 'DM ', '50', 'ERA']
+    
+    # get rid of empty strings
+    steps = [s for s in steps if len(s)>0] # ['100', 'ERA ', '200', 'DM ', '50', 'ERA']
+    
+    # pair alg and iters
+    # [['ERA', 100], ['DM', 200], ['ERA', 50]]
+    alg_iters = [ [steps[i+1].strip(), int(steps[i])] for i in range(0, len(steps), 2)]
+    return alg_iters
 
 def phase(I, support, params, good_pix = None, sample_known = None):
-    if params['phasing']['support'] == 'highest_N':
-        support = params['highest_N']['n']
+    d   = {'eMod' : [],         \
+           'eCon' : [],         \
+           'O'    : None,       \
+           'background' : None, \
+           'B_rav' : None, \
+           'support' : None     \
+            }
+    out = []
 
-    if params['phasing']['background'] is not None :
-        background = True
-    else :
-        background = None
+    params['phasing_parameters']['O'] = None
     
-    # repeats
-    xs    = []
-    eMods = []
-    eCons = []
-    info  = {}
-    info['plan'] = info['queue'] = None
+    params['phasing_parameters']['mask'] = good_pix
+    
+    if params['phasing_parameters']['support'] is None :
+        params['phasing_parameters']['support'] = support
+
+    # Repeats
+    #---------------------------------------------
     for j in range(params['phasing']['repeats']):
-        if params['phasing']['repeats'] > 1 :
-            print '\n\nLoop:', j
-            print '----------'
-            print '----------'
+        out.append(copy.copy(d))
         
-        x    = None
-        eMod = []
-        eCon = []
+        alg_iters = config_iters_to_alg_num(params['phasing']['iters'])
         
-        # Error reduction algorithm
-        #--------------------------
-        if params['phasing']['era_init'] > 0 :
-            x, info = phasing_3d.ERA(I, params['phasing']['era_init'], support, mask = good_pix, O = x, \
-                      background = background, \
-                      method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                      dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
-            eMod += info['eMod']
-            eCon += info['eCon']
-            if info.has_key('background'):
-                background = info['background']
+        for alg, iters in alg_iters :
 
-        for i in range(params['phasing']['outerloop']):
+            if alg == 'ERA':
+               O, info = phasing_3d.ERA(I, iters, **params['phasing_parameters'])
+        
+            if alg == 'DM':
+               O, info = phasing_3d.DM(I,  iters, **params['phasing_parameters'])
+
+            out[j]['O']           = params['phasing_parameters']['O']          = O
+            out[j]['support']     = params['phasing_parameters']['support']    = info['support']
+            out[j]['eMod']       += info['eMod']
+            out[j]['eCon']       += info['eCon']
             
-            # Difference Map
-            #---------------
-            if params['phasing']['dm'] > 0 :
-                x, info = phasing_3d.DM(I, params['phasing']['dm'], support, mask = good_pix, O = x, \
-                          background = background, \
-                          method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                          dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
-                eMod += info['eMod']
-                eCon += info['eCon']
-                if info.has_key('background'):
-                    background = info['background']
-            
-            # Error reduction algorithm
-            #--------------------------
-            if params['phasing']['era'] > 0 :
-                x, info = phasing_3d.ERA(I, params['phasing']['era'], support, mask = good_pix, O = x, \
-                          background = background, \
-                          method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                          dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
-                eMod += info['eMod']
-                eCon += info['eCon']
-                if info.has_key('background'):
-                    background = info['background']
-
-        # Error reduction algorithm
-        #--------------------------
-        if params['phasing']['era_final'] > 0 :
-            x, info = phasing_3d.ERA(I, params['phasing']['era_final'], support, mask = good_pix, O = x, \
-                      background = background, \
-                      method = None, hardware = params['compute']['hardware'], alpha = 1.0e-10, \
-                      dtype = 'double', plan = info['plan'], queue = info['queue'], full_output = True)
-            eMod += info['eMod']
-            eCon += info['eCon']
-            if info.has_key('background'):
-                background = info['background']
-
-        xs.append(centre(x))
-        eMods.append(eMod)
-        eCons.append(eCon)
-
-    if params['phasing']['repeats'] > 1 :
-        xs = np.array(xs)
-        x, T, T_rav = merge_sols(xs)
-        info['I'] = np.abs(np.fft.fftn(x))**2
-        info['transmission'] = T
-        info['transmission radial average'] = T_rav
-        xs = [x]
-    else :
-        info['transmission'] = None
-        info['transmission radial average'] = None
-
-    if info.has_key('r_av'):
-        r_av = info['r_av']
-    else :
-        r_av = None
+            if 'background' in info.keys():
+                print 'background:'
+                out[j]['background']  = params['phasing_parameters']['background'] = info['background']
+                out[j]['B_rav']       = info['r_av']
     
-    return np.array(xs), info['I'], info['support'], eMods, eCons, info['transmission'], info['transmission radial average'], r_av
+    out_merge = out[0]
+    out_merge['I']    = info['I']
+
+    return out_merge
 
 
 if __name__ == "__main__":
@@ -109,9 +72,9 @@ if __name__ == "__main__":
     # read the h5 file
     diff, support, good_pix, sample_known, params = utils.io_utils.read_input_h5(args.input)
     
-    samples_ret, diff_ret, support_ret, emods, econs, T, T_rav, B_rav = phase(diff, support, params, \
-                                good_pix = good_pix, sample_known = sample_known)
+    out = phase(diff, support, params, \
+                        good_pix = good_pix, sample_known = sample_known)
     
     # write the h5 file 
-    utils.io_utils.write_output_h5(params['output']['path'], diff, diff_ret, support, \
-                    support_ret, good_pix, sample_known, samples_ret, emods, econs, None, T, T_rav, B_rav)
+    utils.io_utils.write_output_h5(params['output']['path'], diff, out['I'], support, out['support'], \
+                                  good_pix, sample_known, out['O'], out['eMod'], out['eCon'], None, None, None, out['B_rav'])

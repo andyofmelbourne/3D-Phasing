@@ -5,7 +5,7 @@ import sys
 
 afnumpy.arrayfire.set_device(0)
 
-def ERA(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
+def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
     
@@ -127,9 +127,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
     amp = afnumpy.array(amp)
     O   = afnumpy.array(O)
     mask = afnumpy.array(mask)
-    if type(support) is not int :
+    if support is not None :
         support = afnumpy.array(support)
-
 
     # method 1
     #---------
@@ -149,8 +148,8 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             O1 = O.copy()
             
             # support projection 
-            if type(support) is int :
-                S = choose_N_highest_pixels( (O * O.conj()).real, support)
+            if type(voxel_number) is int :
+                S = choose_N_highest_pixels( (O * O.conj()).real, voxel_number)
             else :
                 S = support
             O = O * S
