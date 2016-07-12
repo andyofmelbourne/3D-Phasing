@@ -1,7 +1,12 @@
 import numpy as np
-import sys
-from itertools import product
 import era
+import era_afnumpy
+
+import afnumpy
+import afnumpy.fft
+import sys
+
+afnumpy.arrayfire.set_device(0)
 
 
 def DM(I, iters, support, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
@@ -103,7 +108,7 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
     One choice for gs and gm is to set gs = -1/b, gm = 1/b and b=1 leading to:
         Rs f  = 2 Ps f - f
         Rm f  = f
-        f_i+1 = f_i + Ps f_i - Pm (2 Ps f_i - f_i)
+        f_i+1 = f_i + Ps f_i - Pm (2 Ps f - f)
         and 
         f* = Ps f_i = PM (2 Ps f_i - f_i)
     
@@ -119,10 +124,6 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
         from dm_gpu import DM_gpu
         return DM_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
     """
-    if hardware == 'gpu':
-        import dm_afnumpy 
-        return dm_afnumpy.DM(I, iters, support, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
-    
     method = 1
     
     if dtype is None :
@@ -141,7 +142,6 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
         O = np.random.random((I.shape)).astype(c_dtype)
     
     O  = O.astype(c_dtype)
-    O0 = O.copy()
     
     I_norm    = np.sum(mask * I)
     amp       = np.sqrt(I).astype(dtype)
@@ -153,9 +153,20 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             background = np.random.random((I.shape)).astype(dtype)
         else :
             background = np.sqrt(background)
+
+        background = afnumpy.array(background)
+        
         b0 = background.copy()
         rs = None
     
+    # send arrays to the gpu
+    amp = afnumpy.array(amp)
+    O   = afnumpy.array(O)
+    O0  = O.copy()
+    mask = afnumpy.array(mask)
+    if type(support) is not int :
+        support = afnumpy.array(support)
+
     # method 1
     #---------
     if method == 1 :
@@ -170,13 +181,14 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             #-------
             # support projection 
             if type(support) is int :
-                S = era.choose_N_highest_pixels( (O * O.conj()).real, support)
+                S = era_afnumpy.choose_N_highest_pixels( (O * O.conj()).real, support)
             else :
                 S = support
             O0 = O * S
             
             if background is not None :
-                b0, rs, r_av = era.radial_symetry(background, rs = rs)
+                b0, rs, r_av = era.radial_symetry(np.array(background), rs = rs)
+                b0 = afnumpy.array(b0)
             
             O          -= O0
             O0         -= O
@@ -184,17 +196,17 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             if background is not None :
                 background -= b0
                 b0         -= background
-                O0, b0      = era.pmod_7(amp, b0, O0, mask, alpha = alpha)
+                O0, b0      = era_afnumpy.pmod_7(amp, b0, O0, mask, alpha = alpha)
                 background += b0
             else :
-                O0 = era.pmod_1(amp, O0, mask, alpha = alpha)
+                O0 = era_afnumpy.pmod_1(amp, O0, mask, alpha = alpha)
             O  += O0
             
             # metrics
             #--------
             O_bak -= O
-            eCon   = np.sum( (O_bak * O_bak.conj()).real ) / np.sum( (O * O.conj()).real )
-            eCon   = np.sqrt(eCon)
+            eCon   = afnumpy.sum( (O_bak * O_bak.conj()).real ) / afnumpy.sum( (O * O.conj()).real )
+            eCon   = afnumpy.sqrt(eCon)
             
             # f* = Ps f_i = PM (2 Ps f_i - f_i)
             O0    = O * S
@@ -207,14 +219,17 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
             eCons.append(eCon)
         
         if full_output : 
+            O = np.array(O)
             info = {}
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O0))**2
             if background is not None :
+                background = np.array(background)
                 background, rs, r_av = era.radial_symetry(background**2, rs = rs)
                 info['background'] = background
                 info['r_av']       = r_av
                 info['I']         += info['background']
+            info['support'] = np.array(S)
             info['eMod']  = eMods
             info['eCon']  = eCons
             return O0, info
@@ -223,10 +238,10 @@ def DM(I, iters, support, mask = 1, O = None, background = None, method = None, 
 
 
 def model_error(amp, O, mask, background = None):
-    O   = np.fft.fftn(O)
+    O   = afnumpy.fft.fftn(O)
     if background is not None :
-        M   = np.sqrt((O.conj() * O).real + background**2)
+        M   = afnumpy.sqrt((O.conj() * O).real + background**2)
     else :
-        M   = np.sqrt((O.conj() * O).real)
-    err = np.sum( mask * (M - amp)**2 ) 
+        M   = afnumpy.sqrt((O.conj() * O).real)
+    err = afnumpy.sum( mask * (M - amp)**2 ) 
     return err

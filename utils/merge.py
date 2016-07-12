@@ -7,6 +7,10 @@ def centre2(O):
     import scipy.ndimage
     a  = (O * O.conj()).real
     a  = np.fft.fftshift(a)
+
+    # a is 'cut' on the side of the array when the centre of mass is 
+    # in unstable equilibrium
+
     cm = np.rint(scipy.ndimage.measurements.center_of_mass(a)).astype(np.int)# - np.array(a.shape)/2
     print 'centre of mass after shifting and fft rolling', cm
     if not np.allclose(cm, np.array(a.shape) / 2.) :

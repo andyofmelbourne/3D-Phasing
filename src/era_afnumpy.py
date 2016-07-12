@@ -150,8 +150,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             
             # support projection 
             if type(support) is int :
-                S = afnumpy.array(choose_N_highest_pixels( np.array((O * O.conj()).real), support))
-                #S = choose_N_highest_pixels_afnumpy( (O * O.conj()).real, support)
+                S = choose_N_highest_pixels( (O * O.conj()).real, support)
             else :
                 S = support
             O = O * S
@@ -183,6 +182,7 @@ def ERA(I, iters, support, mask = 1, O = None, background = None, method = None,
             info['plan'] = info['queue'] = None
             info['I']     = np.abs(np.fft.fftn(O))**2
             if background is not None :
+                background = np.array(background)
                 background, rs, r_av = radial_symetry(background**2, rs = rs)
                 info['background'] = background
                 info['r_av']       = r_av

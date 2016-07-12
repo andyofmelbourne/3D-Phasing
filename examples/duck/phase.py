@@ -4,18 +4,6 @@ import sys, os
 import phasing_3d
 import phasing_3d.utils as utils
 
-def centre(array):
-    # get the centre of mass of |P|^2
-    import scipy.ndimage
-    a  = (array.conj() * array).real
-    cm = np.rint(scipy.ndimage.measurements.center_of_mass(a)).astype(np.int)# - np.array(a.shape)/2
-    
-    # centre array
-    array = np.roll(array, -cm[0], 0)
-    array = np.roll(array, -cm[1], 1)
-    array = np.roll(array, -cm[2], 2)
-    #array = era.multiroll(array, -cm)
-    return array
 
 def phase(I, support, params, good_pix = None, sample_known = None):
     if params['phasing']['support'] == 'highest_N':
