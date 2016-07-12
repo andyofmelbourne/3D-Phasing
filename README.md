@@ -13,6 +13,7 @@ $ cp -r ~/.local/lib/python2.7/site-packages/phasing_3d/examples .
 $ cp ~/.local/lib/python2.7/site-packages/phasing_3d/reconstruct.py .
 $ python reconstruct.py examples/duck/config.ini
 ```
+See also: config_background.ini (radial background retrieval) and config_voxel_number_support.ini (unknown support) in examples/duck/
 
 When complete, you may display the output:
 ```
