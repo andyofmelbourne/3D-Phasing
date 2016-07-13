@@ -1,6 +1,12 @@
 import numpy as np
 import sys
 
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
@@ -125,7 +131,7 @@ def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, backg
     # method 1
     #---------
     if method == 1 :
-        if iters > 0 :
+        if iters > 0 and rank==0:
             print '\n\nalgrithm progress iteration convergence modulus error'
         for i in range(iters) :
             O0 = O.copy()
@@ -159,7 +165,7 @@ def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, backg
             eMod   = np.sum( (O1 * O1.conj()).real ) / I_norm
             eMod   = np.sqrt(eMod)
             
-            update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
+            if rank == 0 : update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
             
             eMods.append(eMod)
             eCons.append(eCon)
@@ -281,8 +287,10 @@ def radial_symetry(background, rs = None, is_fft_shifted = True):
     r_av = np.bincount(rs, background.ravel())
     # prevent divide by zero
     nonzero = np.where(r_hist != 0)
+    zero    = np.where(r_hist == 0)
     # get the average
     r_av[nonzero] = r_av[nonzero] / r_hist[nonzero].astype(r_av.dtype)
+    r_av[zero]    = 0
 
     ########### Make a large background filled with the radial average
     background = r_av[rs].reshape(background.shape)

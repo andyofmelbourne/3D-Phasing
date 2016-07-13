@@ -7,6 +7,8 @@ def parse_cmdline_args():
     parser = argparse.ArgumentParser(prog = 'reconstruct.py', description='phase a merged 3D diffraction volume')
     parser.add_argument('config', type=str, \
                         help="file name of the configuration file")
+    parser.add_argument('-i', '--input', action='store_true', \
+                        help="generate the input file and exit")
     args = parser.parse_args()
 
     # check that args.ini exists
@@ -83,7 +85,7 @@ def parse_cmdline_args_phasing():
 
 
 def write_output_h5(path, diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_units_ret, emods, econs, efids, T, T_rav, B_rav):
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids, PRTF, PRTF_rav, PSD, PSD_I, B_rav):
     import os, h5py
     fnam = os.path.join(path, 'output.h5')
     if_exists_del(fnam)
@@ -95,7 +97,7 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
     f.create_dataset('data', chunks = diff.shape, data = diff, compression='gzip')
     f.create_dataset('data retrieved', chunks = diff.shape, data = diff_ret, compression='gzip')
     f.create_dataset('sample support', chunks = support.shape, data = support.astype(np.int16), compression='gzip')
-    f.create_dataset('sample support retrieved', chunks = support_ret.shape, data = support_ret.astype(np.int16), compression='gzip')
+    f.create_dataset('sample support retrieved', chunks = support_ret.shape, data = support_ret, compression='gzip')
     f.create_dataset('good pixels', chunks = good_pix.shape, data = good_pix.astype(np.int16), compression='gzip')
     f.create_dataset('modulus error', chunks = emods.shape, data = emods, compression='gzip')
     f.create_dataset('convergence metric', chunks = econs.shape, data = np.array(econs), compression='gzip')
@@ -106,9 +108,12 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
         f.create_dataset('fidelity error', chunks = emods.shape, data = -np.ones_like(emods), compression='gzip')
     f.create_dataset('sample init', chunks = solid_unit.shape, data = solid_unit, compression='gzip')
     f.create_dataset('sample retrieved', chunks = (1,) + solid_units_ret.shape[1 :], data = solid_units_ret, compression='gzip')
-    if T is not None and T_rav is not None :
-        f.create_dataset('transmission', chunks = T.shape, data = T, compression='gzip')
-        f.create_dataset('transmission radial average', chunks = T_rav.shape, data = T_rav, compression='gzip')
+    if PRTF is not None and PRTF_rav is not None :
+        f.create_dataset('PRTF', chunks = PRTF.shape, data = PRTF, compression='gzip')
+        f.create_dataset('PRTF radial average', chunks = PRTF_rav.shape, data = PRTF_rav, compression='gzip')
+    if PSD is not None and PSD_I is not None :
+        f.create_dataset('PSD', chunks = PSD.shape, data = PSD, compression='gzip')
+        f.create_dataset('PSD data', chunks = PSD_I.shape, data = PSD_I, compression='gzip')
     if B_rav is not None :
         f.create_dataset('background radial average', chunks = B_rav.shape, data = B_rav, compression='gzip')
 
@@ -130,18 +135,23 @@ def read_output_h5(path):
     diff            = f['data'].value
     diff_ret        = f['data retrieved'].value
     support         = f['sample support'].value.astype(np.bool)
-    support_ret     = f['sample support retrieved'].value.astype(np.bool)
+    support_ret     = f['sample support retrieved'].value
     good_pix        = f['good pixels'].value.astype(np.bool)
     emods           = f['modulus error'].value
     econs           = f['convergence metric'].value
     efids           = f['fidelity error'].value
     solid_unit      = f['sample init'].value
     solid_units_ret = f['sample retrieved'].value
-    if 'transmission' in f.keys():
-        T               = f['transmission'].value
-        T_rav           = f['transmission radial average'].value
+    if 'PRTF' in f.keys():
+        T               = f['PRTF'].value
+        T_rav           = f['PRTF radial average'].value
     else :
         T = T_rav = None
+    if 'PSD' in f.keys():
+        PSD               = f['PSD'].value
+        PSD_rav           = f['PSD data'].value
+    else :
+        PSD = PSD_rav = None
     if 'background radial average' in f.keys():
         B_rav           = f['background radial average'].value
     else :
@@ -151,7 +161,7 @@ def read_output_h5(path):
     f.close()
     
     return diff, diff_ret, support, support_ret, \
-        good_pix, solid_unit, solid_units_ret, emods, econs, efids, T, T_rav, B_rav
+        good_pix, solid_unit, solid_units_ret, emods, econs, efids, T, T_rav, PSD, PSD_rav, B_rav
 
 
 def write_input_h5(path, diff, support, good_pix, solid_known, config):

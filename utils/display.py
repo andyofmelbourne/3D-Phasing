@@ -102,14 +102,9 @@ class Application():
 
     def __init__(self, diff, diff_ret, support, support_ret, \
                  good_pix, solid_unit, solid_units_ret,       \
-                 emods, econs, efids, T, T_rav, B_rav):
+                 emods, econs, efids, PRTF, PRTF_rav, PSD, PSD_I, B_rav):
         
-        if len(solid_units_ret.shape) == 4 :
-            solid_unit_ret = solid_units_ret[0].real
-        else :
-            solid_unit_ret = solid_units_ret.real
-            emods = [emods]
-            econs = [econs]
+        solid_unit_ret = solid_units_ret.real
             
         solid_unit_ret = np.fft.ifftshift(solid_unit_ret)
         
@@ -188,22 +183,27 @@ class Application():
         self.support_plots.setImage(support_plots.T)
         self.diff_plots.setImage(diff_plots.T)
         self.diff_ret_plots.setImage(diff_ret_plots.T)
-        for emod in emods : 
-            self.plot_emod.plot(emod)
+        if len(emods.shape) > 1 :
+            for i in range(emods.shape[0]) : 
+                self.plot_emod.plot(emods[i])
+            for i in range(econs.shape[0]) :
+                self.plot_econ.plot(econs[i])
+        else :
+            self.plot_emod.plot(emods)
+            self.plot_econ.plot(econs)
+
         self.plot_emod.setTitle('Modulus error l2norm:')
-        for econ in econs : 
-            self.plot_econ.plot(econ)
         self.plot_econ.setTitle('convergence l2norm:')
         
         ## Display the widget as a new window
         w.show()
 
         
-        if T is not None :
+        if PRTF is not None :
             ## Show the transmission plots
-            T_plots = np.hstack((np.fft.ifftshift(T[0, :, :]), \
-                                 np.fft.ifftshift(T[:, 0, :]), \
-                                 np.fft.ifftshift(T[:, :, 0])))
+            T_plots = np.hstack((np.fft.ifftshift(PRTF[0, :, :]), \
+                                 np.fft.ifftshift(PRTF[:, 0, :]), \
+                                 np.fft.ifftshift(PRTF[:, :, 0])))
 
             # Define a top-level widget to hold everything
             w2 = QtGui.QWidget()
@@ -231,11 +231,37 @@ class Application():
             
             self.T_plots.setImage(T_plots.T)
             
-            self.plot_T_rav.plot(T_rav)
-            self.plot_T_rav.setTitle('radial average of the transmission')
+            self.plot_T_rav.plot(1.0e-5 +PRTF_rav)
+            self.plot_T_rav.setTitle('radial average of the PRTF')
             
             ## Display the widget as a new window
             w2.show()
+
+        if PSD is not None :
+            # Define a top-level widget to hold everything
+            w4 = QtGui.QWidget()
+
+            # line plots of the T_rav
+            self.plot_PSD   = pg.PlotWidget()
+            self.plot_PSD_I = pg.PlotWidget()
+
+            Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+
+            Vsplitter.addWidget(self.plot_PSD)
+            Vsplitter.addWidget(self.plot_PSD_I)
+
+            hlayout_tot = QtGui.QHBoxLayout()
+            hlayout_tot.addWidget(Vsplitter)
+
+            w4.setLayout(hlayout_tot)
+            
+            self.plot_PSD.plot(1.0e-5 + PSD)
+            self.plot_PSD.setTitle('PSD of the reconstruction')
+            self.plot_PSD_I.plot(1.0e-5 + PSD_I)
+            self.plot_PSD_I.setTitle('PSD of the data')
+            
+            ## Display the widget as a new window
+            w4.show()
 
         if B_rav is not None :
             # Define a top-level widget to hold everything
@@ -365,9 +391,9 @@ if __name__ == '__main__':
         # read the h5 file 
         diff, diff_ret, support, support_ret, \
         good_pix, solid_unit, solid_units_ret, \
-        emods, econs, efids, T, T_rav, B_rav     = io_utils.read_output_h5(args.path)
+        emods, econs, efids, PRTF, PRTF_rav, PSD, PSD_I, B_rav = io_utils.read_output_h5(args.path)
 
         ex  = Application(diff, diff_ret, support, support_ret, \
                           good_pix, solid_unit, solid_units_ret, \
-                          emods, econs, efids, T, T_rav, B_rav)
+                          emods, econs, efids, PRTF, PRTF_rav, PSD, PSD_I, B_rav)
     

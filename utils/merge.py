@@ -3,28 +3,72 @@ import h5py
 from itertools import product
 from noise import rad_av
 
-def centre2(O):
+def T_fourier(shape, T, is_fft_shifted = True):
+    """
+    e - 2pi i r q
+    e - 2pi i dx n m / N dx
+    e - 2pi i n m / N 
+    """
+    # make i, j, k for each pixel
+    i = np.fft.fftfreq(shape[0]) 
+    j = np.fft.fftfreq(shape[1])
+    k = np.fft.fftfreq(shape[2])
+    i, j, k = np.meshgrid(i, j, k, indexing='ij')
+
+    if is_fft_shifted is False :
+        i = np.fft.ifftshift(i)
+        j = np.fft.ifftshift(j)
+        k = np.fft.ifftshift(k)
+
+    phase_ramp = np.exp(- 2J * np.pi * (i * T[0] + j * T[1] + k * T[2]))
+    return phase_ramp
+
+def roll(a, T = [0.0, 0.0, 0.0]):
+    phase_ramp = T_fourier(a.shape, T)
+    b = np.fft.fftn(a)
+    b *= phase_ramp 
+    b = np.fft.ifftn(b)
+    return b.astype(a.dtype)
+
+def centre(O):
     import scipy.ndimage
     a  = (O * O.conj()).real
     a  = np.fft.fftshift(a)
 
-    # a is 'cut' on the side of the array when the centre of mass is 
-    # in unstable equilibrium
+    aroll = []
+    for i in range(len(a.shape)):
+        axes = range(len(a.shape))
+        axes.pop(i)
+        t = np.sum(a, axis = tuple(axes))
+        
+        dcm = [scipy.ndimage.measurements.center_of_mass(np.roll(t, i+1))[0] - \
+               scipy.ndimage.measurements.center_of_mass(np.roll(t, i  ))[0]   \
+               for i in range(t.shape[0])]
+        
+        dcm = scipy.ndimage.gaussian_filter1d(dcm, t.shape[0]/3., mode='wrap')
+        
+        aroll.append(np.argmax(dcm))
+    
+    
+    # roughly centre O
+    O = multiroll(O, aroll)
+    O = np.fft.fftshift(O)
 
-    cm = np.rint(scipy.ndimage.measurements.center_of_mass(a)).astype(np.int)# - np.array(a.shape)/2
-    print 'centre of mass after shifting and fft rolling', cm
-    if not np.allclose(cm, np.array(a.shape) / 2.) :
-        print 'bad centering, rolling a bit and retrying:'
-        out = multiroll(O, (np.random.random((3,)) * np.array(a.shape)).astype(np.int) )
-        out = centre(out)
-        out = centre2(out)
-    else :
-        out = O
-    return out
+    cm = np.rint(scipy.ndimage.measurements.center_of_mass( (O*O.conj()).real)).astype(np.int)
+    O  = multiroll(O, -cm)
+    
+    # roughly centre O
+    #O = multiroll(O, aroll)
+    
+    # this doesn't really work (lot's of smearing from the fourier interpolation)
+    # fourier shift to the centre of mass
+    #O = np.fft.ifftshift(O)
+    #cm = scipy.ndimage.measurements.center_of_mass((O * O.conj()).real)
+    #print cm, aroll
+    #O  = roll(O, cm)
+    return O
 
-
-
-def merge_sols(Os):
+def merge_sols(Os, silent=False):
     """
     grab the solutions, align the phases, un-flip and centre
     then average them.
@@ -32,19 +76,20 @@ def merge_sols(Os):
     Also return the radial average of the merged farfield 
     diffraction pattern.
     """
-    print '\n Merging solutions'
-    print ' centering...'
+    if not silent : print '\n Merging solutions'
+    if not silent : print ' centering...'
     for i in range(len(Os)):
-        Os[i] = centre2(Os[i])
+        Os[i] = centre(Os[i])
         
-    print ' aligning phases...'
-    for i in range(len(Os)):
-        s     = np.sum(Os[i])
-        phase = np.arctan2(s.imag, s.real)
-        Os[i] = Os[i] * np.exp(- 1J * phase)
-        print '\t sum(imag) after alignment:', np.sum(Os[i].imag)
+    if not silent : print ' aligning phases...'
+    if np.any(np.iscomplex(Os[0])):
+        for i in range(len(Os)):
+            s     = np.sum(Os[i])
+            phase = np.arctan2(s.imag, s.real)
+            Os[i] = Os[i] * np.exp(- 1J * phase)
+            if not silent : print '\t sum(imag) after alignment:', np.sum(Os[i].imag)
 
-    print '\n flipping with respect to Os[0]'
+    if not silent : print '\n flipping with respect to Os[0]'
     O = Os[0]
     for i in range(1, len(Os)):
         Ot  = Os[i].copy()
@@ -59,32 +104,44 @@ def merge_sols(Os):
         Ot2 = (Ot2 * Ot2.conj()).real
         er2 = np.sum( Ot2 )
 
-        print ''
-        print '\t error un-flipped:', er1
-        print '\t error    flipped:', er2
+        if not silent : print ''
+        if not silent : print '\t error un-flipped:', er1
+        if not silent : print '\t error    flipped:', er2
         if er2 < er1 :
-            print '\t flipping...'
+            if not silent : print '\t flipping...'
             Os[i] = Ot
-
+    
     O = np.sum(Os, axis = 0) / float(Os.shape[0])
+    if np.any(np.iscomplex(Os[0])):
+        angle = np.angle(np.fft.fftn(Os, axes=(1,2,3)))
+        prft  = np.mean(np.exp(1.0J * angle), axis=0)
+    else :
+        prft = None
+    return O, prft
 
-    T, rav_T = transmission(Os)
-    return O, T, rav_T
+def PRTF(O, I, B=0, mask=None):
+    """
+    As defined in: High-resolution ab initio three-dimensional x-ray
+    diffraction microscopy Vol. 23, No. 5 / May 2006 / J. Opt. Soc. Am. A
+    """
+    O     = np.fft.fftn(O)
+    M     = np.sqrt(np.abs(O)**2 + B)
+    amp   = (np.sqrt(I)+1.0e-10)
+    if mask is not None :
+        amp[~mask] = M[~mask]
+    prtf  = M / amp
+    prtf  = np.clip(prtf, 0.0, 3.0)
+    rav_prtf = rad_av(prtf, is_fft_shifted = True)
+    return prtf, rav_prtf
 
-def transmission(Os):
-    Os = np.fft.fftn(Os, axes = (-3,-2,-1))
-    Os = np.angle(Os)
-    T  = np.abs(np.average(np.exp(1J * Os), axis=0))
-    rav_T = rad_av(T, is_fft_shifted = True)
-    return T, rav_T
-
-def radial_average_from_sol(O):
+def PSD(O, I):
     Oh = np.fft.fftn(O)
+    rad_av_I         = rad_av(I, is_fft_shifted = True)
     rad_av_intensity = rad_av(np.abs(Oh)**2, is_fft_shifted = True)
     rad_av_phase     = rad_av(np.angle(Oh),  is_fft_shifted = True)
-    return rad_av_intensity, rad_av_phase
+    return rad_av_intensity, rad_av_I, rad_av_phase
 
-def centre(array):
+def centre_old(array):
     # get the centre of mass of |P|^2
     import scipy.ndimage
     a  = (array.conj() * array).real
@@ -206,6 +263,8 @@ def multiroll(x, shift, axis=None):
 
 
 if __name__ == '__main__':
+    pass
+    """
     import h5py
     import pyqtgraph as pg
     f  = h5py.File('spi/ivan/output.h5', 'r')
@@ -218,3 +277,4 @@ if __name__ == '__main__':
     plot = pg.plot(rad_av_data)
     plot.plot(rad_av_in, pen=pg.mkPen('b'))
     pg.plot(rad_av_phase)
+    """

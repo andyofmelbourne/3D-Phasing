@@ -3,6 +3,11 @@ import sys
 from itertools import product
 import era
 
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
     """
@@ -159,7 +164,7 @@ def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, backgr
     # method 1
     #---------
     if method == 1 :
-        if iters > 0 :
+        if iters > 0  and rank==0:
             print '\n\nalgrithm progress iteration convergence modulus error'
         for i in range(iters) :
             
@@ -170,6 +175,7 @@ def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, backgr
             #-------
             # support projection 
             if type(voxel_number) is int :
+                print('hello')
                 S = era.choose_N_highest_pixels( (O * O.conj()).real, voxel_number)
             else :
                 S = support
@@ -201,7 +207,7 @@ def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, backgr
             eMod  = model_error(amp, O0, mask, background = background)
             eMod  = np.sqrt( eMod / I_norm )
             
-            era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
+            if rank == 0 : era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
             
             eMods.append(eMod)
             eCons.append(eCon)

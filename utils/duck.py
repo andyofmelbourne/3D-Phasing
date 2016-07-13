@@ -24,7 +24,7 @@ def generate_diff(config):
     # add circle
     if config['detector']['add_circle'] is not None :
         #print 'adding circular background:'
-        background_circle = np.max(diff) * 0.0001 * ~circle.make_beamstop(diff.shape, config['detector']['add_circle'])
+        background_circle = np.max(diff) * 0.001 * ~circle.make_beamstop(diff.shape, config['detector']['add_circle'])
         diff += background_circle 
     else :
         background_circle = None

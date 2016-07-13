@@ -30,7 +30,7 @@ if __name__ == "__main__":
     #--------------------------------------
     if params.has_key('input') and  params['input'].has_key('script'):
         runstr = "python " + params['input']['script'] + ' ' + args.config
-        print '\n',runstr
+        print('\n',runstr)
         subprocess.call([runstr], shell=True)
 
     # forward problem
@@ -42,9 +42,12 @@ if __name__ == "__main__":
         utils.io_utils.write_input_h5(params['output']['path'], diff, support, \
                 beamstop * edges, solid_unit, args.config)
     
+    if args.input :
+        sys.exit()
+
     # inverse problem
     #--------------------------------------
     runstr = "python " + params['phasing']['script'] + ' ' + \
                      os.path.join(params['output']['path'],'input.h5')
-    print '\n',runstr
+    print('\n',runstr)
     subprocess.call([runstr], shell=True)
