@@ -15,10 +15,12 @@ $ python reconstruct.py examples/duck/config.ini
 ```
 
 See also: 
-1. config_background.ini: radial background retrieval, and 
-2. config_voxel_number_support.ini: unknown support uses the number of voxels in the sample
-3. config_repeats.ini: merge many independent recontructions with unkown support and background retrieval:
-    1. MPI:
+1 config_background.ini: radial background retrieval, and 
+2 config_voxel_number_support.ini: unknown support uses the number of voxels in the sample
+3 config_repeats.ini: merge many independent recontructions with unkown support and background retrieval:
+
+
+    1 MPI:
         ```bash
         $ python reconstruct.py examples/duck/config_repeats.ini -i
         $ mpirun -np 20 python examples/duck/phase.py examples/duck/input.h5
