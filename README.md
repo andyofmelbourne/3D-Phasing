@@ -15,17 +15,16 @@ $ python reconstruct.py examples/duck/config.ini
 ```
 
 See also: 
-- config_background.ini: radial background retrieval, and 
-- config_voxel_number_support.ini: unknown support uses the number of voxels in the sample
-- config_repeats.ini: merge many independent recontructions with unkown support and background retrieval:
-    - MPI:
-        ```bash
-        $ python reconstruct.py examples/duck/config_repeats.ini -i
-        $ mpirun -np 20 python examples/duck/phase.py examples/duck/input.h5
-        $ python ~/.local/lib/python2.7/site-packages/phasing_3d/utils/display.py examples/duck/output.h5 output
-        ```
-        The first line just makes the input file while the second runs the script with 20 cpu cores, each core repeating the reconstructions 10 times for a grand total of 200 recontructions. 
-in examples/duck/.
+- **config_background.ini**: radial background retrieval, and 
+- **config_voxel_number_support.ini**: unknown support uses the number of voxels in the sample
+- **config_repeats.ini**: merge many independent recontructions with unkown support and background retrieval
+
+For this last example:
+```bash
+$ python reconstruct.py examples/duck/config_repeats.ini -i     
+$ mpirun -np 20 python examples/duck/phase.py examples/duck/input.h5     
+```  
+The first line just makes the input file while the second runs the script with 20 cpu cores, each core repeating the reconstructions 10 times for a grand total of 200 recontructions. 
 
 When complete, you may display the output:
 ```
