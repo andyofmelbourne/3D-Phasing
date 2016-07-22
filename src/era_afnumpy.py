@@ -156,7 +156,7 @@ def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, backg
             
             # support projection 
             if type(voxel_number) is int :
-                S = choose_N_highest_pixels( (O * O.conj()).real, voxel_number)
+                S = choose_N_highest_pixels( (O * O.conj()).real, voxel_number, support=support)
             else :
                 S = support
             O = O * S
@@ -220,7 +220,7 @@ def update_progress(progress, algorithm, i, emod, esup):
     sys.stdout.write(text)
     sys.stdout.flush()
 
-def choose_N_highest_pixels(array, N):
+def choose_N_highest_pixels_old(array, N):
     percent = (1. - float(N) / float(array.size)) * 100.
     thresh  = np.percentile(array, percent)
     support = array > thresh
@@ -230,7 +230,7 @@ def choose_N_highest_pixels(array, N):
     # print 'number of pixels in support:', np.sum(support)
     return support
 
-def choose_N_highest_pixels_afnumpy(array, N, tol = 1.0e-5, maxIters=1000):
+def choose_N_highest_pixels(array, N, tol = 1.0e-5, maxIters=1000, support=None):
     """
     Use bisection to find the root of
     e(x) = \sum_i (array_i > x) - N
@@ -238,13 +238,22 @@ def choose_N_highest_pixels_afnumpy(array, N, tol = 1.0e-5, maxIters=1000):
     then return (array_i > x) a boolean mask
 
     This is faster than using percentile (surprising)
+    
+    If support0 is not None then values outside the support
+    are ignored. 
     """
     s0 = array.max()
     s1 = array.min()
     
+    if support is not None :
+        a = array[support > 0]
+    else :
+        a = array
+        support = 1
+    
     for i in range(maxIters):
         s = (s0 + s1) / 2.
-        e = afnumpy.sum(array > s) - N
+        e = afnumpy.sum(a > s) - N
     
         if np.abs(e) < tol :
             break
@@ -254,9 +263,9 @@ def choose_N_highest_pixels_afnumpy(array, N, tol = 1.0e-5, maxIters=1000):
         else :
             s1 = s
         
-    support = array > s
+    S = (array > s) * support
     #print 'number of pixels in support:', afnumpy.sum(support), i, s, e, type(support)
-    return support
+    return S
 
 
 def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):

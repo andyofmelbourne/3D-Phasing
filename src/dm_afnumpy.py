@@ -188,7 +188,7 @@ def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, backgr
             #-------
             # support projection 
             if type(voxel_number) is int :
-                S = era_afnumpy.choose_N_highest_pixels( (O * O.conj()).real, voxel_number)
+                S = era_afnumpy.choose_N_highest_pixels( (O * O.conj()).real, voxel_number, support = support)
             else :
                 S = support
             O0 = O * S
