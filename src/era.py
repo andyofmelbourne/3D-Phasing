@@ -225,13 +225,13 @@ def choose_N_highest_pixels(array, N, tol = 1.0e-5, maxIters=1000, support=None)
 
     This is faster than using percentile (surprising)
 
-    If support0 is not None then values outside the support
+    If support is not None then values outside the support
     are ignored. 
     """
     s0 = array.max()
     s1 = array.min()
 
-    if support0 is not None :
+    if support is not None :
         a = array[support > 0]
     else :
         a = array
