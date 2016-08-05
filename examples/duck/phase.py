@@ -61,11 +61,10 @@ def out_merge(out, I, good_pix):
             support, t = utils.merge.merge_sols(np.array(support))
             if background is not 0 :
                 background = np.mean(np.array(background), axis=0)
+    else :
+        PRTF = PRTF_rav = None
         
     if rank == 0 :
-        # get the prft
-        PRTF, PRTF_rav = utils.merge.PRTF(O, I, background, good_pix)
-
         # get the PSD
         PSD, PSD_I, PSD_phase = utils.merge.PSD(O, I)
 

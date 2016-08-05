@@ -1,13 +1,16 @@
 import numpy as np
 import sys
 
-from mpi4py import MPI
 
+from mappers import Mapper
+from mappers import isValid
+
+from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
+def ERA(I, iters, **args):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
     
@@ -20,13 +23,13 @@ def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, backg
         M : the number of pixels along slow scan axis of the detector
         K : the number of pixels along fast scan axis of the detector
     
+    iters : int
+        The number of ERA iterations to perform.
+    
     O : numpy.ndarray, (N, M, K) 
         The real-space scattering density of the object such that:
             I = |F[O]|^2
         where F[.] is the 3D Fourier transform of '.'.     
-    
-    iters : int
-        The number of ERA iterations to perform.
     
     support : (numpy.ndarray, None or int), (N, M, K)
         Real-space region where the object function is known to be zero. 
@@ -93,98 +96,80 @@ def ERA(I, iters, support = None, voxel_number = None, mask = 1, O = None, backg
     Examples 
     --------
     """
-    if hardware == 'gpu':
-        import era_afnumpy 
-        return era_afnumpy.ERA(I, iters, support, voxel_number, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
-    
-    method = 1
-    
-    if dtype is None :
+    # set the real and complex data precision
+    # ---------------------------------------
+    if 'dtype' not in args.keys() :
         dtype   = I.dtype
         c_dtype = (I[0,0,0] + 1J * I[0, 0, 0]).dtype
     
-    elif dtype == 'single':
+    elif args['dtype'] == 'single':
         dtype   = np.float32
         c_dtype = np.complex64
 
-    elif dtype == 'double':
+    elif args['dtype'] == 'double':
         dtype   = np.float64
         c_dtype = np.complex128
 
-    if O is None :
-        O = np.random.random((I.shape)).astype(c_dtype)
+    amp             = np.sqrt(I.astype(dtype))
+    args['dtype']   = dtype
+    args['c_dtype'] = c_dtype
+
+    if isValid('hardware', args) and args['hardware'] == 'gpu':
+        from mappers_gpu import Mapper 
+        import afnumpy
+        amp       = afnumpy.array(amp)
     
-    O    = O.astype(c_dtype)
-    
-    I_norm    = np.sum(mask * I)
-    amp       = np.sqrt(I).astype(dtype)
     eMods     = []
     eCons     = []
 
-    if background is not None :
-        if background is True :
-            background = np.random.random((I.shape)).astype(dtype)
-        else :
-            background = np.sqrt(background)
-        rs = None
+    # Set the Mapper for the single mode (default)
+    # ---------------------------------------
+    # this guy is responsible for doing:
+    #   I     = mapper.Imap(modes)   # mapping the modes to the intensity
+    #   modes = mapper.Pmod(modes)   # applying the data projection to the modes
+    #   modes = mapper.Psup(modes)   # applying the support projection to the modes
+    #   O     = mapper.object(modes) # the main object of interest
+    #   dict  = mapper.finish(modes) # add any additional output to the info dict
+    # ---------------------------------------
+    mapper = Mapper(I.shape, **args)
+    modes  = mapper.modes
 
-    # method 1
-    #---------
-    if method == 1 :
-        if iters > 0 and rank==0:
-            print '\n\nalgrithm progress iteration convergence modulus error'
-        for i in range(iters) :
-            O0 = O.copy()
-            
-            # modulus projection 
-            if background is not None :
-                O, background  = pmod_7(amp, background, O, mask, alpha = alpha)
-            else :
-                O = pmod_1(amp, O, mask, alpha = alpha)
-            
-            O1 = O.copy()
-            
-            # support projection 
-            if type(voxel_number) is int :
-                S = choose_N_highest_pixels( (O * O.conj()).real, voxel_number, support = support)
-            else :
-                S = support
-            O = O * S
-
-            if background is not None :
-                background, rs, r_av = radial_symetry(background.copy(), rs = rs)
-            
-            # metrics
-            O2 = O.copy()
-            
-            O2    -= O0
-            eCon   = np.sum( (O2 * O2.conj()).real ) / np.sum( (O0 * O0.conj()).real )
-            eCon   = np.sqrt(eCon)
-            
-            O1    -= O0
-            eMod   = np.sum( (O1 * O1.conj()).real ) / I_norm
-            eMod   = np.sqrt(eMod)
-            
-            if rank == 0 : update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
-            
-            eMods.append(eMod)
-            eCons.append(eCon)
+    if iters > 0 and rank == 0 :
+        print '\n\nalgrithm progress iteration convergence modulus error'
+    
+    for i in range(iters) :
+        modes0 = modes.copy()
         
-        if full_output : 
-            info = {}
-            info['plan'] = info['queue'] = None
-            info['I']     = np.abs(np.fft.fftn(O))**2
-            if background is not None :
-                background, rs, r_av = radial_symetry(background**2, rs = rs)
-                info['background'] = background
-                info['r_av']       = r_av
-                info['I']         += info['background']
-            info['support']    = S
-            info['eMod']  = eMods
-            info['eCon']  = eCons
-            return O, info
-        else :
-            return O
+        # modulus projection 
+        # ------------------
+        modes = mapper.Pmod(modes, amp)
+
+        modes1 = modes.copy()
+        
+        # support projection 
+        # ------------------
+        modes = mapper.Psup(modes)
+        
+        # metrics
+        modes1 -= modes0
+        eMod    = mapper.l2norm(modes1, modes0)
+        
+        modes0 -= modes
+        eCon    = mapper.l2norm(modes0, modes)
+        
+        if rank == 0 : update_progress(i / max(1.0, float(iters-1)), 'ERA', i, eCon, eMod )
+        
+        eMods.append(eMod)
+        eCons.append(eCon)
+    
+    info = {}
+    info['eMod']  = eMods
+    info['eCon']  = eCons
+    O = mapper.object(modes)
+    
+    info.update(mapper.finish(modes))
+    
+    return O, info
 
 
 def update_progress(progress, algorithm, i, emod, esup):
@@ -206,102 +191,4 @@ def update_progress(progress, algorithm, i, emod, esup):
     sys.stdout.write(text)
     sys.stdout.flush()
 
-def choose_N_highest_pixels_slow(array, N):
-    percent = (1. - float(N) / float(array.size)) * 100.
-    thresh  = np.percentile(array, percent)
-    support = array > thresh
-    # print '\n\nchoose_N_highest_pixels'
-    # print 'percentile         :', percent, '%'
-    # print 'intensity threshold:', thresh
-    # print 'number of pixels in support:', np.sum(support)
-    return support
-
-def choose_N_highest_pixels(array, N, tol = 1.0e-5, maxIters=1000, support=None):
-    """
-    Use bisection to find the root of
-    e(x) = \sum_i (array_i > x) - N
-
-    then return (array_i > x) a boolean mask
-
-    This is faster than using percentile (surprising)
-
-    If support is not None then values outside the support
-    are ignored. 
-    """
-    s0 = array.max()
-    s1 = array.min()
-
-    if support is not None :
-        a = array[support > 0]
-    else :
-        a = array
-        support = 1
-    
-    for i in range(maxIters):
-        s = (s0 + s1) / 2.
-        e = np.sum(a > s) - N
-    
-        if np.abs(e) < tol :
-            break
-
-        if e < 0 :
-            s0 = s
-        else :
-            s1 = s
-        
-    S = (array > s) * support
-    #print 'number of pixels in support:', np.sum(support), i, s, e
-    return S
-
-def pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
-    O = np.fft.fftn(O)
-    O = Pmod_1(amp, O, mask = mask, alpha = alpha)
-    O = np.fft.ifftn(O)
-    return O
-    
-def Pmod_1(amp, O, mask = 1, alpha = 1.0e-10):
-    out  = mask * O * amp / (abs(O) + alpha)
-    out += (1 - mask) * O
-    return out
-
-def pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
-    O = np.fft.fftn(O)
-    O, background = Pmod_7(amp, background, O, mask = mask, alpha = alpha)
-    O = np.fft.ifftn(O)
-    return O, background
-    
-def Pmod_7(amp, background, O, mask = 1, alpha = 1.0e-10):
-    M = mask * amp / np.sqrt((O.conj() * O).real + background**2 + alpha)
-    out         = O * M
-    background *= M
-    out += (1 - mask) * O
-    return out, background
-
-def radial_symetry(background, rs = None, is_fft_shifted = True):
-    if rs is None :
-        i = np.fft.fftfreq(background.shape[0]) * background.shape[0]
-        j = np.fft.fftfreq(background.shape[1]) * background.shape[1]
-        k = np.fft.fftfreq(background.shape[2]) * background.shape[2]
-        i, j, k = np.meshgrid(i, j, k, indexing='ij')
-        rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16)
-        
-        if is_fft_shifted is False :
-            rs = np.fft.fftshift(rs)
-        rs = rs.ravel()
-    
-    ########### Find the radial average
-    # get the r histogram
-    r_hist = np.bincount(rs)
-    # get the radial total 
-    r_av = np.bincount(rs, background.ravel())
-    # prevent divide by zero
-    nonzero = np.where(r_hist != 0)
-    zero    = np.where(r_hist == 0)
-    # get the average
-    r_av[nonzero] = r_av[nonzero] / r_hist[nonzero].astype(r_av.dtype)
-    r_av[zero]    = 0
-
-    ########### Make a large background filled with the radial average
-    background = r_av[rs].reshape(background.shape)
-    return background, rs, r_av
     

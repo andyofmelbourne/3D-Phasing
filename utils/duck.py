@@ -31,9 +31,9 @@ def generate_diff(config):
 
     # define the solid_unit support
     if config['sample']['support_frac'] is not None :
-        support = support.expand_region_by(solid_unit_expanded > 0.1, config['sample']['support_frac'])
+        S = support.expand_region_by(solid_unit_expanded > 0.1, config['sample']['support_frac'])
     else :
-        support = solid_unit_expanded > (solid_unit_expanded.min() + 1.0e-5)
+        S = solid_unit_expanded > (solid_unit_expanded.min() + 1.0e-5)
     
     # add a beamstop
     if config['detector']['beamstop'] is not None :
@@ -42,7 +42,7 @@ def generate_diff(config):
     else :
         beamstop = np.ones_like(diff, dtype=np.bool)
 
-    return diff, beamstop, background_circle, edges, support, solid_unit_expanded
+    return diff, beamstop, background_circle, edges, S, solid_unit_expanded
 
 
 def interp_3d(array, shapeout):

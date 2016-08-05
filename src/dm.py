@@ -3,13 +3,16 @@ import sys
 from itertools import product
 import era
 
+from mappers import *
+
 from mpi4py import MPI
+from mappers import isValid
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, background = None, method = None, hardware = 'cpu', alpha = 1.0e-10, dtype = 'single', queue = None, plan = None, full_output = True):
+def DM(I, iters, **args):
     """
     Find the phases of 'I' given O using the Error Reduction Algorithm.
     
@@ -124,115 +127,77 @@ def DM(I, iters, support = None, voxel_number = None, mask = 1, O = None, backgr
         from dm_gpu import DM_gpu
         return DM_gpu(I, R, P, O, iters, OP_iters, mask, background, method, hardware, alpha, dtype, full_output)
     """
-    if hardware == 'gpu':
-        import dm_afnumpy 
-        return dm_afnumpy.DM(I, iters, support, voxel_number, mask, O, background, method, hardware, alpha, dtype, queue, plan, full_output)
-    
-    method = 1
-    
-    if dtype is None :
+    # set the real and complex data precision
+    # ---------------------------------------
+    if 'dtype' not in args.keys() :
         dtype   = I.dtype
         c_dtype = (I[0,0,0] + 1J * I[0, 0, 0]).dtype
     
-    elif dtype == 'single':
+    elif args['dtype'] == 'single':
         dtype   = np.float32
         c_dtype = np.complex64
 
-    elif dtype == 'double':
+    elif args['dtype'] == 'double':
         dtype   = np.float64
         c_dtype = np.complex128
 
-    if O is None :
-        O = np.random.random((I.shape)).astype(c_dtype)
-    
-    O  = O.astype(c_dtype)
-    O0 = O.copy()
-    
-    I_norm    = np.sum(mask * I)
+    args['dtype']   = dtype
+    args['c_dtype'] = c_dtype
+
     amp       = np.sqrt(I).astype(dtype)
+
+    if isValid('hardware', args) and args['hardware'] == 'gpu':
+        from mappers_gpu import Mapper 
+        import afnumpy
+        amp       = afnumpy.array(amp)
+    
     eMods     = []
     eCons     = []
     
-    if background is not None :
-        if background is True :
-            background = np.random.random((I.shape)).astype(dtype)
-        else :
-            background = np.sqrt(background)
-        b0 = background.copy()
-        rs = None
+    mapper = Mapper(I.shape, **args)
+    modes  = mapper.modes
     
-    # method 1
-    #---------
-    if method == 1 :
-        if iters > 0  and rank==0:
-            print '\n\nalgrithm progress iteration convergence modulus error'
-        for i in range(iters) :
-            
-            # reference
-            O_bak = O.copy()
-            
-            # update 
-            #-------
-            # support projection 
-            if type(voxel_number) is int :
-                S = era.choose_N_highest_pixels( (O * O.conj()).real, voxel_number, support = support)
-            else :
-                S = support
-            O0 = O * S
-            
-            if background is not None :
-                b0, rs, r_av = era.radial_symetry(background, rs = rs)
-            
-            O          -= O0
-            O0         -= O
-            # modulus projection 
-            if background is not None :
-                background -= b0
-                b0         -= background
-                O0, b0      = era.pmod_7(amp, b0, O0, mask, alpha = alpha)
-                background += b0
-            else :
-                O0 = era.pmod_1(amp, O0, mask, alpha = alpha)
-            O  += O0
-            
-            # metrics
-            #--------
-            O_bak -= O
-            eCon   = np.sum( (O_bak * O_bak.conj()).real ) / np.sum( (O * O.conj()).real )
-            eCon   = np.sqrt(eCon)
-            
-            # f* = Ps f_i = PM (2 Ps f_i - f_i)
-            O0    = O * S
-            eMod  = model_error(amp, O0, mask, background = background)
-            eMod  = np.sqrt( eMod / I_norm )
-            
-            if rank == 0 : era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
-            
-            eMods.append(eMod)
-            eCons.append(eCon)
-        
-        if full_output : 
-            info = {}
-            info['plan'] = info['queue'] = None
-            info['I']     = np.abs(np.fft.fftn(O0))**2
-            if background is not None :
-                background, rs, r_av = era.radial_symetry(background**2, rs = rs)
-                info['background'] = background
-                info['r_av']       = r_av
-                info['I']         += info['background']
-            info['support']    = S
-            info['eMod']  = eMods
-            info['eCon']  = eCons
-            return O0, info
-        else :
-            return O0
+    modes_sup = mapper.Psup(modes)
 
-
-def model_error(amp, O, mask, background = None):
-    O   = np.fft.fftn(O)
-    if background is not None :
-        M   = np.sqrt((O.conj() * O).real + background**2)
+    if isValid('mask', args) :
+        I_norm = (args['mask'] * I).sum()
     else :
-        M   = np.sqrt((O.conj() * O).real)
-    err = np.sum( mask * (M - amp)**2 ) 
-    return err
+        I_norm = I.sum()
+
+    if iters > 0  and rank==0:
+        print '\n\nalgrithm progress iteration convergence modulus error'
+    
+    for i in range(iters) :
+        
+        # reference
+        modes0 = modes.copy()
+        
+        # update 
+        #-------
+        modes += mapper.Pmod(modes_sup * 2 - modes, amp) - modes_sup
+        
+        # metrics
+        #--------
+        modes0 -= modes
+        eCon    = mapper.l2norm(modes0, modes)
+
+        # f* = Ps f_i = PM (2 Ps f_i - f_i)
+        modes_sup = mapper.Psup(modes)
+
+        eMod = mapper.Emod(modes_sup, amp, I_norm)
+        
+        if rank == 0 : era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
+        
+        eMods.append(eMod)
+        eCons.append(eCon)
+    
+    info = {}
+    info['eMod']  = eMods
+    info['eCon']  = eCons
+    O = mapper.object(modes_sup)
+    
+    info.update(mapper.finish(modes_sup))
+    
+    return O, info
+
+
