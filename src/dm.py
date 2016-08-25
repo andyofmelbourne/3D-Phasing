@@ -144,25 +144,21 @@ def DM(I, iters, **args):
     args['dtype']   = dtype
     args['c_dtype'] = c_dtype
 
-    amp       = np.sqrt(I).astype(dtype)
+    if isValid('Mapper', args) : 
+        print 'using user defined mapper'
+        Mapper = args['Mapper']
 
-    if isValid('hardware', args) and args['hardware'] == 'gpu':
+    elif isValid('hardware', args) and args['hardware'] == 'gpu':
+        print 'using gpu mapper'
         from mappers_gpu import Mapper 
-        import afnumpy
-        amp       = afnumpy.array(amp)
     
     eMods     = []
     eCons     = []
     
-    mapper = Mapper(I.shape, **args)
+    mapper = Mapper(I, **args)
     modes  = mapper.modes
     
     modes_sup = mapper.Psup(modes)
-
-    if isValid('mask', args) :
-        I_norm = (args['mask'] * I).sum()
-    else :
-        I_norm = I.sum()
 
     if iters > 0  and rank==0:
         print '\n\nalgrithm progress iteration convergence modulus error'
@@ -174,7 +170,7 @@ def DM(I, iters, **args):
         
         # update 
         #-------
-        modes += mapper.Pmod(modes_sup * 2 - modes, amp) - modes_sup
+        modes += mapper.Pmod(modes_sup * 2 - modes) - modes_sup
         
         # metrics
         #--------
@@ -184,7 +180,7 @@ def DM(I, iters, **args):
         # f* = Ps f_i = PM (2 Ps f_i - f_i)
         modes_sup = mapper.Psup(modes)
 
-        eMod = mapper.Emod(modes_sup, amp, I_norm)
+        eMod = mapper.Emod(modes_sup)
         
         if rank == 0 : era.update_progress(i / max(1.0, float(iters-1)), 'DM', i, eCon, eMod )
         
@@ -194,6 +190,7 @@ def DM(I, iters, **args):
     info = {}
     info['eMod']  = eMods
     info['eCon']  = eCons
+    
     O = mapper.object(modes_sup)
     
     info.update(mapper.finish(modes_sup))

@@ -40,16 +40,6 @@ def ERA(I, iters, **args):
         The valid detector pixels. Mask[i, j, k] = 1 (or True) when the detector pixel 
         i, j, k is valid, Mask[i, j, k] = 0 (or False) otherwise.
     
-    method : (None, 1, 2, 3, 4), optional, default (None)
-        method = None :
-            Automattically choose method 1, 2 based on the contents of 'background'.
-            if   'background' == None then method = 1
-            elif 'background' != None then method = 2
-        method = 1 :
-            Just update 'O'
-        method = 2 :
-            Update 'O' and 'background'
-    
     hardware : ('cpu', 'gpu'), optional, default ('cpu') 
         Choose to run the reconstruction on a single cpu core ('cpu') or a single gpu
         ('gpu'). The numerical results should be identical.
@@ -60,17 +50,17 @@ def ERA(I, iters, **args):
     dtype : (None, 'single' or 'double'), optional, default ('single')
         Determines the numerical precision of the calculation. If dtype==None, then
         it is determined from the datatype of I.
-    
-    full_output : bool, optional, default (True)
-        If true then return a bunch of diagnostics (see info) as a python dictionary 
-        (a list of key : value pairs).
+
+    Mapper : class, optional, default None
+        A mapping class that provides the methods supplied by:
+            phasing_3d.src.mappers.Mapper
     
     Returns
     -------
     O : numpy.ndarray, (U, V, K) 
         The real-space object function after 'iters' iterations of the ERA algorithm.
     
-    info : dict, optional
+    info : dict
         contains diagnostics:
             
             'I'     : the diffraction pattern corresponding to object above
@@ -110,14 +100,14 @@ def ERA(I, iters, **args):
         dtype   = np.float64
         c_dtype = np.complex128
 
-    amp             = np.sqrt(I.astype(dtype))
     args['dtype']   = dtype
     args['c_dtype'] = c_dtype
 
-    if isValid('hardware', args) and args['hardware'] == 'gpu':
+    if isValid('Mapper', args) : 
+        Mapper = args['Mapper']
+
+    elif isValid('hardware', args) and args['hardware'] == 'gpu':
         from mappers_gpu import Mapper 
-        import afnumpy
-        amp       = afnumpy.array(amp)
     
     eMods     = []
     eCons     = []
@@ -131,7 +121,7 @@ def ERA(I, iters, **args):
     #   O     = mapper.object(modes) # the main object of interest
     #   dict  = mapper.finish(modes) # add any additional output to the info dict
     # ---------------------------------------
-    mapper = Mapper(I.shape, **args)
+    mapper = Mapper(I, **args)
     modes  = mapper.modes
 
     if iters > 0 and rank == 0 :
@@ -142,7 +132,7 @@ def ERA(I, iters, **args):
         
         # modulus projection 
         # ------------------
-        modes = mapper.Pmod(modes, amp)
+        modes = mapper.Pmod(modes)
 
         modes1 = modes.copy()
         
@@ -165,10 +155,10 @@ def ERA(I, iters, **args):
     info = {}
     info['eMod']  = eMods
     info['eCon']  = eCons
-    O = mapper.object(modes)
     
     info.update(mapper.finish(modes))
     
+    O = mapper.object(modes)
     return O, info
 
 

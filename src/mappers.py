@@ -83,21 +83,21 @@ class Modes(dict):
 
 class Mapper():
     
-    def __init__(self, shape, **args):
+    def __init__(self, I, **args):
         modes = Modes()
         
         # check if there is a background
         if isValid('background', args):
             if args['background'] is True :
-                modes['B'] = np.random.random((shape)).astype(args['dtype'])
+                modes['B'] = np.random.random((I.shape)).astype(args['dtype'])
             else :
                 modes['B'] = np.sqrt(args['background']).astype(args['dtype'])
 
         if isValid('O', args):
             modes['O'] = args['O']
         else :
-            modes['O'] = np.random.random(shape).astype(args['c_dtype'])
-
+            modes['O'] = np.random.random(I.shape).astype(args['c_dtype'])
+        
         # this is the radial value for every pixel 
         # in the volume
         self.rs    = None 
@@ -109,6 +109,9 @@ class Mapper():
         self.alpha = 1.0e-10
         if isValid('alpha', args):
             self.alpha = args['alpha']
+
+        self.I_norm = (self.mask * I).sum()
+        self.amp   = np.sqrt(I.astype(args['dtype']))
 
         # define the data projection
         # --------------------------
@@ -147,14 +150,14 @@ class Mapper():
             out['B'], self.rs, self.r_av = radial_symetry(out['B'], rs = self.rs)
         return out
 
-    def Pmod_single(self, modes, amp):
+    def Pmod_single(self, modes):
         out = modes.copy()
-        out['O'] = pmod_single(amp, modes['O'], self.mask, alpha = self.alpha)
+        out['O'] = pmod_single(self.amp, modes['O'], self.mask, alpha = self.alpha)
         return out
     
-    def Pmod_back(self, modes, amp):
+    def Pmod_back(self, modes):
         out = modes.copy()
-        out['O'], out['B'] = pmod_back(amp, modes['B'], modes['O'], self.mask, alpha = self.alpha)
+        out['O'], out['B'] = pmod_back(self.amp, modes['B'], modes['O'], self.mask, alpha = self.alpha)
         return out
 
     def Imap(self, modes):
@@ -165,10 +168,10 @@ class Mapper():
             I = (O.conj() * O).real 
         return I
     
-    def Emod(self, modes, amp, I_norm):
+    def Emod(self, modes):
         M         = self.Imap(modes)
-        eMod      = np.sum( self.mask * ( np.sqrt(M) - amp )**2 )
-        eMod      = np.sqrt( eMod / I_norm )
+        eMod      = np.sum( self.mask * ( np.sqrt(M) - self.amp )**2 )
+        eMod      = np.sqrt( eMod / self.I_norm )
         return eMod
 
     def finish(self, modes):

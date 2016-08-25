@@ -14,13 +14,13 @@ afnumpy.arrayfire.set_device(rank % c)
 
 class Mapper():
     
-    def __init__(self, shape, **args):
+    def __init__(self, I, **args):
         modes = Modes()
         
         # check if there is a background
         if isValid('background', args):
             if args['background'] is True :
-                modes['B'] = np.random.random((shape)).astype(args['dtype'])
+                modes['B'] = np.random.random((I.shape)).astype(args['dtype'])
             else :
                 modes['B'] = np.sqrt(args['background']).astype(args['dtype'])
         
@@ -29,7 +29,7 @@ class Mapper():
         if isValid('O', args):
             modes['O'] = args['O']
         else :
-            modes['O'] = np.random.random(shape).astype(args['c_dtype'])
+            modes['O'] = np.random.random(I.shape).astype(args['c_dtype'])
 
         modes['O'] = afnumpy.array(modes['O'])
 
@@ -40,11 +40,19 @@ class Mapper():
         self.mask = 1
         if isValid('mask', args):
             self.mask = args['mask']
-            self.mask = afnumpy.array(self.mask)
+            if args['mask'] is not 1 :
+                self.mask = afnumpy.array(self.mask)
 
         self.alpha = 1.0e-10
         if isValid('alpha', args):
             self.alpha = args['alpha']
+
+        if isValid('mask', args) :
+            self.I_norm = (args['mask'] * I).sum()
+        else :
+            self.I_norm = I.sum()
+        
+        self.amp   = afnumpy.sqrt(afnumpy.array(I.astype(args['dtype'])))
 
         # define the data projection
         # --------------------------
@@ -84,14 +92,14 @@ class Mapper():
             out['B'] = afnumpy.array(back)
         return out
 
-    def Pmod_single(self, modes, amp):
+    def Pmod_single(self, modes):
         out = modes.copy()
-        out['O'] = pmod_single(amp, modes['O'], self.mask, alpha = self.alpha)
+        out['O'] = pmod_single(self.amp, modes['O'], self.mask, alpha = self.alpha)
         return out
     
-    def Pmod_back(self, modes, amp):
+    def Pmod_back(self, modes):
         out = modes.copy()
-        out['O'], out['B'] = pmod_back(amp, modes['B'], modes['O'], self.mask, alpha = self.alpha)
+        out['O'], out['B'] = pmod_back(self.amp, modes['B'], modes['O'], self.mask, alpha = self.alpha)
         return out
 
     def Imap(self, modes):
@@ -102,10 +110,10 @@ class Mapper():
             I = (O.conj() * O).real 
         return I
     
-    def Emod(self, modes, amp, I_norm):
+    def Emod(self, modes):
         M         = self.Imap(modes)
-        eMod      = afnumpy.sum( self.mask * ( afnumpy.sqrt(M) - amp )**2 )
-        eMod      = afnumpy.sqrt( eMod / I_norm )
+        eMod      = afnumpy.sum( self.mask * ( afnumpy.sqrt(M) - self.amp )**2 )
+        eMod      = afnumpy.sqrt( eMod / self.I_norm )
         return eMod
 
     def finish(self, modes):
