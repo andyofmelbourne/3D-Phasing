@@ -152,6 +152,10 @@ def DM(I, iters, **args):
         print 'using gpu mapper'
         from mappers_gpu import Mapper 
     
+    else :
+        print 'using default cpu mapper'
+        from mappers import Mapper 
+    
     eMods     = []
     eCons     = []
     

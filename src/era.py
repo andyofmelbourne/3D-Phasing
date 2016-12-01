@@ -109,6 +109,10 @@ def ERA(I, iters, **args):
     elif isValid('hardware', args) and args['hardware'] == 'gpu':
         from mappers_gpu import Mapper 
     
+    else :
+        print 'using default cpu mapper'
+        from mappers import Mapper 
+    
     eMods     = []
     eCons     = []
 
@@ -141,8 +145,9 @@ def ERA(I, iters, **args):
         modes = mapper.Psup(modes)
         
         # metrics
-        modes1 -= modes0
-        eMod    = mapper.l2norm(modes1, modes0)
+        #modes1 -= modes0
+        #eMod    = mapper.l2norm(modes1, modes0)
+        eMod    = mapper.Emod(modes)
         
         modes0 -= modes
         eCon    = mapper.l2norm(modes0, modes)
