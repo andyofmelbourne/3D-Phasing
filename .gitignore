@@ -9,7 +9,6 @@ data
 probsum/
 logs/
 *.png
-*.raw
 *.swp
 *.pyc
 *.h5
