@@ -1,7 +1,7 @@
 import numpy as np
 import h5py
 from itertools import product
-from noise import rad_av
+from .noise import rad_av
 
 def T_fourier(shape, T, is_fft_shifted = True):
     """
@@ -37,7 +37,7 @@ def centre(O):
 
     aroll = []
     for i in range(len(a.shape)):
-        axes = range(len(a.shape))
+        axes = list(range(len(a.shape)))
         axes.pop(i)
         t = np.sum(a, axis = tuple(axes))
         
@@ -76,20 +76,20 @@ def merge_sols(Os, silent=False):
     Also return the radial average of the merged farfield 
     diffraction pattern.
     """
-    if not silent : print '\n Merging solutions'
-    if not silent : print ' centering...'
+    if not silent : print('\n Merging solutions')
+    if not silent : print(' centering...')
     for i in range(len(Os)):
         Os[i] = centre(Os[i])
         
-    if not silent : print ' aligning phases...'
+    if not silent : print(' aligning phases...')
     if np.any(np.iscomplex(Os[0])):
         for i in range(len(Os)):
             s     = np.sum(Os[i])
             phase = np.arctan2(s.imag, s.real)
             Os[i] = Os[i] * np.exp(- 1J * phase)
-            if not silent : print '\t sum(imag) after alignment:', np.sum(Os[i].imag)
+            if not silent : print('\t sum(imag) after alignment:', np.sum(Os[i].imag))
 
-    if not silent : print '\n flipping with respect to Os[0]'
+    if not silent : print('\n flipping with respect to Os[0]')
     O = Os[0]
     for i in range(1, len(Os)):
         Ot  = Os[i].copy()
@@ -104,11 +104,11 @@ def merge_sols(Os, silent=False):
         Ot2 = (Ot2 * Ot2.conj()).real
         er2 = np.sum( Ot2 )
 
-        if not silent : print ''
-        if not silent : print '\t error un-flipped:', er1
-        if not silent : print '\t error    flipped:', er2
+        if not silent : print('')
+        if not silent : print('\t error un-flipped:', er1)
+        if not silent : print('\t error    flipped:', er2)
         if er2 < er1 :
-            if not silent : print '\t flipping...'
+            if not silent : print('\t flipping...')
             Os[i] = Ot
     
     O = np.sum(Os, axis = 0) / float(Os.shape[0])

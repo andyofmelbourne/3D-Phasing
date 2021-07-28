@@ -1,0 +1,17 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python = 3
+  - pyqt
+  - pyqtgraph
+  - h5py
+  - scipy
+  - numpy
+  - tqdm
+  - pocl
+  - pyopencl
+  - pip
+  - ipython
+  - mpi4py
+  - configparser

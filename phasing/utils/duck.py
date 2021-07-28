@@ -1,9 +1,9 @@
 import os
 import numpy as np
-import noise
-import support
-import circle
-import os
+
+from . import noise
+from . import support
+from . import circle
 
 def generate_diff(config):
     solid_unit = make_3D_duck(shape = config['sample']['shape'])
@@ -81,7 +81,7 @@ def make_3D_duck(shape = (12, 25, 30)):
 
     r = np.sqrt( ((i-origin[0])**2 + (j-origin[1])**2).astype(np.float) )
 
-    rs = range(50) + range(50, 0, -1)
+    rs = list(range(50)) + list(range(50, 0, -1))
     rs = np.array(rs) * 200 / 50.
     
     circle = lambda ri : r < ri

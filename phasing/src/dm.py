@@ -1,16 +1,18 @@
 import numpy as np
 import sys
 from itertools import product
-import era
+from . import era
 
-from mappers import *
+from .mappers import *
+from .mappers import isValid
 
-from mpi4py import MPI
-from mappers import isValid
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
+try : 
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+except :
+    rank = 0
 
 def DM(I, iters, **args):
     """
@@ -145,16 +147,16 @@ def DM(I, iters, **args):
     args['c_dtype'] = c_dtype
 
     if isValid('Mapper', args) : 
-        print 'using user defined mapper'
+        print('using user defined mapper')
         Mapper = args['Mapper']
 
     elif isValid('hardware', args) and args['hardware'] == 'gpu':
-        print 'using gpu mapper'
-        from mappers_gpu import Mapper 
+        print('using gpu mapper')
+        from .mappers_gpu import Mapper 
     
     else :
-        print 'using default cpu mapper'
-        from mappers import Mapper 
+        print('using default cpu mapper')
+        from .mappers import Mapper 
     
     eMods     = []
     eCons     = []
@@ -165,7 +167,7 @@ def DM(I, iters, **args):
     modes_sup = mapper.Psup(modes)
 
     if iters > 0  and rank==0:
-        print '\n\nalgrithm progress iteration convergence modulus error'
+        print('\n\nalgrithm progress iteration convergence modulus error')
     
     for i in range(iters) :
         

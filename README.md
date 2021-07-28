@@ -3,7 +3,7 @@ Basic python code for phasing three-dimensional diffraction volumes
 
 To install run:
 ```
-$ git clone https://github.com/andyofmelbourne/3D-Phasing.git ~/.local/lib/python2.7/site-packages/phasing_3d
+$ git clone https://github.com/andyofmelbourne/3D-phasing.git && cd 3D-phasing && pip install -e .
 ```
 
 ## Example command line

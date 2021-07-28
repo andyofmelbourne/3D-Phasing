@@ -9,11 +9,10 @@ This script just runs the pipline:
 
 import time
 import sys, os
-import ConfigParser
+import configparser
 import subprocess
 
-import phasing_3d
-from phasing_3d import utils
+from phasing import utils
 
 
 if __name__ == "__main__":
@@ -21,21 +20,21 @@ if __name__ == "__main__":
     #--------------------------------------
     args = utils.io_utils.parse_cmdline_args()
     
-    config = ConfigParser.ConfigParser()
+    config = configparser.ConfigParser()
     config.read(args.config)
     
     params = utils.io_utils.parse_parameters(config)
     
     # make input 
     #--------------------------------------
-    if params.has_key('input') and  params['input'].has_key('script'):
+    if 'input' in params and 'script' in params['input']:
         runstr = "python " + params['input']['script'] + ' ' + args.config
         print('\n',runstr)
         subprocess.call([runstr], shell=True)
 
     # forward problem
     #--------------------------------------
-    if params.has_key('simulation') and params['simulation']['sample'] == 'duck':
+    if 'simulation' in params and params['simulation']['sample'] == 'duck':
         diff, beamstop, background_circle, edges, support, solid_unit = utils.duck.generate_diff(params)
         
         # write to file

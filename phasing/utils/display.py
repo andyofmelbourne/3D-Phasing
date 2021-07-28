@@ -1,5 +1,6 @@
 import pyqtgraph as pg
-from PyQt4 import QtGui, QtCore
+from PyQt5 import QtGui, QtCore
+from PyQt5.QtWidgets import QWidget, QApplication, QSplitter, QHBoxLayout
 import pyqtgraph as pg
 import numpy as np
 import signal
@@ -54,11 +55,11 @@ def crop_to_nonzero(arrayin, mask=None):
 def show_vol(map_3d):
     import pyqtgraph.opengl as gl
     signal.signal(signal.SIGINT, signal.SIG_DFL)    # allow Control-C
-    app = QtGui.QApplication(sys.argv)
+    app = QApplication(sys.argv)
     ex  = Show_vol(map_3d)
     sys.exit(app.exec_())
 
-class Show_vol(QtGui.QWidget):
+class Show_vol(QWidget):
     def __init__(self, map_3d):
 
         super(Show_vol, self).__init__()
@@ -132,10 +133,10 @@ class Application():
         diff_plots = diff_plots**0.2
         
         # Always start by initializing Qt (only once per application)
-        app = QtGui.QApplication([])
+        app = QApplication([])
 
         # Define a top-level widget to hold everything
-        w = QtGui.QWidget()
+        w = QWidget()
 
         # 2D projection images for the sample
         self.duck_plots = pg.ImageView()
@@ -154,27 +155,27 @@ class Application():
         #self.plot_efid = pg.PlotWidget()
         self.plot_econ = pg.PlotWidget()
          
-        Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+        Vsplitter = QSplitter(QtCore.Qt.Vertical) 
 
         # ducks
-        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter = QSplitter(QtCore.Qt.Horizontal)
         Hsplitter.addWidget(self.duck_plots)
         Hsplitter.addWidget(self.support_plots)
         Vsplitter.addWidget(Hsplitter)
         
         # diffs
-        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter = QSplitter(QtCore.Qt.Horizontal)
         Hsplitter.addWidget(self.diff_plots)
         Hsplitter.addWidget(self.diff_ret_plots)
         Vsplitter.addWidget(Hsplitter)
 
         # errors
-        Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        Hsplitter = QSplitter(QtCore.Qt.Horizontal)
         Hsplitter.addWidget(self.plot_emod)
         Hsplitter.addWidget(self.plot_econ)
         Vsplitter.addWidget(Hsplitter)
         
-        hlayout_tot = QtGui.QHBoxLayout()
+        hlayout_tot = QHBoxLayout()
         hlayout_tot.addWidget(Vsplitter)
 
         w.setLayout(hlayout_tot)
@@ -206,7 +207,7 @@ class Application():
                                  np.fft.ifftshift(PRTF[:, :, 0])))
 
             # Define a top-level widget to hold everything
-            w2 = QtGui.QWidget()
+            w2 = QWidget()
 
             # 2D slices for the transmission
             self.T_plots = pg.ImageView()
@@ -214,17 +215,17 @@ class Application():
             # line plots of the T_rav
             self.plot_T_rav = pg.PlotWidget()
 
-            Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+            Vsplitter = QSplitter(QtCore.Qt.Vertical) 
 
-            Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+            Hsplitter = QSplitter(QtCore.Qt.Horizontal)
             Hsplitter.addWidget(self.plot_T_rav)
             Vsplitter.addWidget(Hsplitter)
 
-            Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+            Hsplitter = QSplitter(QtCore.Qt.Horizontal)
             Hsplitter.addWidget(self.T_plots)
             Vsplitter.addWidget(Hsplitter)
             
-            hlayout_tot = QtGui.QHBoxLayout()
+            hlayout_tot = QHBoxLayout()
             hlayout_tot.addWidget(Vsplitter)
 
             w2.setLayout(hlayout_tot)
@@ -239,18 +240,18 @@ class Application():
 
         if PSD is not None :
             # Define a top-level widget to hold everything
-            w4 = QtGui.QWidget()
+            w4 = QWidget()
 
             # line plots of the T_rav
             self.plot_PSD   = pg.PlotWidget()
             self.plot_PSD_I = pg.PlotWidget()
 
-            Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+            Vsplitter = QSplitter(QtCore.Qt.Vertical) 
 
             Vsplitter.addWidget(self.plot_PSD)
             Vsplitter.addWidget(self.plot_PSD_I)
 
-            hlayout_tot = QtGui.QHBoxLayout()
+            hlayout_tot = QHBoxLayout()
             hlayout_tot.addWidget(Vsplitter)
 
             w4.setLayout(hlayout_tot)
@@ -265,18 +266,18 @@ class Application():
 
         if B_rav is not None :
             # Define a top-level widget to hold everything
-            w3 = QtGui.QWidget()
+            w3 = QWidget()
 
             # line plots of the B_rav
             self.plot_B_rav = pg.PlotWidget()
 
-            Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+            Vsplitter = QSplitter(QtCore.Qt.Vertical) 
 
-            Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+            Hsplitter = QSplitter(QtCore.Qt.Horizontal)
             Hsplitter.addWidget(self.plot_B_rav)
             Vsplitter.addWidget(Hsplitter)
             
-            hlayout_tot = QtGui.QHBoxLayout()
+            hlayout_tot = QHBoxLayout()
             hlayout_tot.addWidget(Vsplitter)
 
             w3.setLayout(hlayout_tot)
@@ -311,10 +312,10 @@ class Show_input():
         diff_plots = diff_plots**0.2
         
         # Always start by initializing Qt (only once per application)
-        app = QtGui.QApplication([])
+        app = QApplication([])
 
         # Define a top-level widget to hold everything
-        w = QtGui.QWidget()
+        w = QWidget()
 
         # 2D projection images for the sample
         self.duck_plots = pg.ImageView()
@@ -326,7 +327,7 @@ class Show_input():
         #self.plot_emod = pg.PlotWidget()
         #self.plot_efid = pg.PlotWidget()
          
-        Vsplitter = QtGui.QSplitter(QtCore.Qt.Vertical) 
+        Vsplitter = QSplitter(QtCore.Qt.Vertical) 
 
         # ducks
         Vsplitter.addWidget(self.duck_plots)
@@ -335,12 +336,12 @@ class Show_input():
         Vsplitter.addWidget(self.diff_plots)
         
         # errors
-        #Hsplitter = QtGui.QSplitter(QtCore.Qt.Horizontal)
+        #Hsplitter = QSplitter(QtCore.Qt.Horizontal)
         #Hsplitter.addWidget(self.plot_emod)
         #Hsplitter.addWidget(self.plot_efid)
         #Vsplitter.addWidget(Hsplitter)
         
-        hlayout_tot = QtGui.QHBoxLayout()
+        hlayout_tot = QHBoxLayout()
         hlayout_tot.addWidget(Vsplitter)
 
         w.setLayout(hlayout_tot)
@@ -353,7 +354,7 @@ class Show_input():
         #self.plot_efid.setTitle('Fidelity error l2norm:')
         
         ## Display the widget as a new window
-        print 'showing...'
+        print('showing...')
         w.show()
 
         ## Start the Qt event loop

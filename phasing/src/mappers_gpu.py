@@ -2,7 +2,7 @@ import numpy as np
 import afnumpy
 import afnumpy.fft
 
-from mappers import *
+from .mappers import *
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
