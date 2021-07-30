@@ -9,7 +9,6 @@ dependencies:
   - scipy
   - numpy
   - tqdm
-  - pocl
   - pyopencl
   - pip
   - ipython
