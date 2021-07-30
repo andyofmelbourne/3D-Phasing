@@ -6,12 +6,18 @@ To install run:
 $ git clone https://github.com/andyofmelbourne/3D-phasing.git && cd 3D-phasing && pip install -e .
 ```
 
+To install dependencies through conda, run:
+```
+$ conda env create -f environment.yml -n phasing
+$ conda activate phasing
+```
+
+
 ## Example command line
 A basic example with a 3D duck:
 ```bash
-$ cp -r ~/.local/lib/python2.7/site-packages/phasing_3d/examples .
-$ cp ~/.local/lib/python2.7/site-packages/phasing_3d/reconstruct.py .
-$ python reconstruct.py examples/duck/config.ini
+$ phasing_init.py && cd example
+$ python reconstruct.py config.ini
 ```
 
 See also: 
@@ -21,14 +27,14 @@ See also:
 
 For this last example:
 ```bash
-$ python reconstruct.py examples/duck/config_repeats.ini -i     
-$ mpirun -np 20 python examples/duck/phase.py examples/duck/input.h5     
+$ python reconstruct.py config_repeats.ini -i     
+$ mpirun -np 20 python phase.py input.h5     
 ```  
 The first line just makes the input file while the second runs the script with 20 cpu cores, each core repeating the reconstructions 10 times for a grand total of 200 recontructions. 
 
 When complete, you may display the output:
 ```
-$ python ~/.local/lib/python2.7/site-packages/phasing_3d/utils/display.py examples/duck/output.h5 output
+$ python display_phasing.py output.h5 output
 ```
 
 ## Example python 
