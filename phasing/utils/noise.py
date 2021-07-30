@@ -82,9 +82,14 @@ def rad_av(diff, rs = None, is_fft_shifted = True):
     if rs is None :
         i = np.fft.fftfreq(diff.shape[0]) * diff.shape[0]
         j = np.fft.fftfreq(diff.shape[1]) * diff.shape[1]
-        k = np.fft.fftfreq(diff.shape[2]) * diff.shape[2]
-        i, j, k = np.meshgrid(i, j, k, indexing='ij')
-        rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16).ravel()
+        
+        if len(diff.shape) == 3 :
+            k = np.fft.fftfreq(diff.shape[2]) * diff.shape[2]
+            i, j, k = np.meshgrid(i, j, k, indexing='ij')
+            rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16).ravel()
+        else :
+            i, j = np.meshgrid(i, j, indexing='ij')
+            rs   = np.sqrt(i**2 + j**2).astype(np.int16).ravel()
         
         if is_fft_shifted is False :
             rs = np.fft.fftshift(rs)

@@ -169,20 +169,14 @@ def write_input_h5(path, diff, support, good_pix, solid_known, config):
     fnam = os.path.join(path, 'input.h5')
     if_exists_del(fnam)
     
-    f = h5py.File(fnam, 'w')
-    f.create_dataset('data', data = diff)
-    f.create_dataset('sample support', data = support.astype(np.int16))
-    f.create_dataset('good pixels', data = good_pix.astype(np.int16))
-    if solid_known is not None :
-        f.create_dataset('sample', data = solid_known)
-    # read the config file and dump it into the h5 file
-    #g = open(config).readlines()
-    #h = ''
-    #for line in g:
-    #    h += line
-    #f.create_dataset('config file', data = np.array(h))
-    f.create_dataset('config file', data = open(config).read())
-    f.close()
+    with h5py.File(fnam, 'w') as f:
+        f.create_dataset('data', data = diff)
+        f.create_dataset('sample support', data = support.astype(np.int16))
+        f.create_dataset('good pixels', data = good_pix.astype(np.int16))
+        if solid_known is not None :
+            f.create_dataset('sample', data = solid_known)
+        # read the config file and dump it into the h5 file
+        f.create_dataset('config file', data = open(config).read())
     return 
 
 

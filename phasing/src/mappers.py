@@ -267,9 +267,13 @@ def radial_symetry(background, rs = None, is_fft_shifted = True):
     if rs is None :
         i = np.fft.fftfreq(background.shape[0]) * background.shape[0]
         j = np.fft.fftfreq(background.shape[1]) * background.shape[1]
-        k = np.fft.fftfreq(background.shape[2]) * background.shape[2]
-        i, j, k = np.meshgrid(i, j, k, indexing='ij')
-        rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16)
+        if len(background.shape) == 3 :
+            k = np.fft.fftfreq(background.shape[2]) * background.shape[2]
+            i, j, k = np.meshgrid(i, j, k, indexing='ij')
+            rs      = np.sqrt(i**2 + j**2 + k**2).astype(np.int16)
+        else :
+            i, j = np.meshgrid(i, j, indexing='ij')
+            rs   = np.sqrt(i**2 + j**2).astype(np.int16)
         
         if is_fft_shifted is False :
             rs = np.fft.fftshift(rs)

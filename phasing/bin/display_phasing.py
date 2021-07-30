@@ -6,7 +6,7 @@ import numpy as np
 import signal
 import sys
 
-import io_utils
+from phasing.utils import io_utils
 
 def crop_to_nonzero(arrayin, mask=None):
     """Crop arrayin to the smallest rectangle that contains all of the non-zero elements and return the result. If mask is given use that to determine non-zero elements.

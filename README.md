@@ -34,7 +34,7 @@ $ python ~/.local/lib/python2.7/site-packages/phasing_3d/utils/display.py exampl
 ## Example python 
 Of course the above is all just padding around:
 ```python
-import phasing_3d
+import phasing
 import numpy as np
 O = np.random.random((64,64,64))
 S = np.zeros(O.shape, dtype=np.bool)

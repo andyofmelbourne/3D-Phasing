@@ -3,8 +3,8 @@ import sys, os
 import re
 import copy
 
-import phasing_3d
-import phasing_3d.utils as utils
+import phasing
+import phasing.utils as utils
 
 from mpi4py import MPI
 
@@ -29,14 +29,14 @@ def out_merge(out, I, good_pix):
     if out[0]['background'] is not None :
         background = np.mean([i['background'] for i in out], axis=0)
     else :
-        background = 0
+        background = False
 
     silent = True
     if rank == 0: silent = False
     
     # centre, flip and average the retrievals
     O, PRTF    = utils.merge.merge_sols(np.array([i['O'] for i in out]), silent)
-    support, t = utils.merge.merge_sols(np.array([i['support'] for i in out]).astype(np.float), True)
+    support, t = utils.merge.merge_sols(np.array([i['support'] for i in out]).astype(np.float64), True)
        
     eMod    = np.array([i['eMod'] for i in out])
     eCon    = np.array([i['eCon'] for i in out])
@@ -48,18 +48,18 @@ def out_merge(out, I, good_pix):
         eMod       = comm.gather(eMod, root=0)
         eCon       = comm.gather(eCon, root=0)
         PRTF       = comm.gather(PRTF, root=0)
-        if background is not 0 :
+        if background is not False:
             background = comm.gather(background, root=0)
         
         if rank == 0 :
             PRTF           = np.abs(np.mean(np.array(PRTF), axis=0))
-            t, t, PRTF_rav = phasing_3d.src.era.radial_symetry(PRTF)
+            t, t, PRTF_rav = phasing.src.mappers.radial_symetry(PRTF)
             
             eMod       = np.array(eMod).reshape((size*eMod[0].shape[0], eMod[0].shape[1]))
             eCon       = np.array(eCon).reshape((size*eCon[0].shape[0], eCon[0].shape[1]))
             O, t       = utils.merge.merge_sols(np.array(O))
             support, t = utils.merge.merge_sols(np.array(support))
-            if background is not 0 :
+            if background is not False:
                 background = np.mean(np.array(background), axis=0)
     else :
         PRTF = PRTF_rav = None
@@ -115,10 +115,10 @@ def phase(I, support, params, good_pix = None, sample_known = None):
         for alg, iters in alg_iters :
             
             if alg == 'ERA':
-               O, info = phasing_3d.ERA(I, iters, **params['phasing_parameters'])
+               O, info = phasing.ERA(I, iters, **params['phasing_parameters'])
              
             if alg == 'DM':
-               O, info = phasing_3d.DM(I,  iters, **params['phasing_parameters'])
+               O, info = phasing.DM(I,  iters, **params['phasing_parameters'])
              
             out[j]['O']           = params['phasing_parameters']['O']          = O
             out[j]['support']     = params['phasing_parameters']['support']    = info['support']

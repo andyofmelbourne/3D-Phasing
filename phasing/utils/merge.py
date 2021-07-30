@@ -91,6 +91,10 @@ def merge_sols(Os, silent=False):
 
     if not silent : print('\n flipping with respect to Os[0]')
     O = Os[0]
+
+    rev_slice = tuple(slice(None,None,-1) for _ in range(len(Os[0].shape)))
+    ones      = [1 for _ in range(len(Os[0].shape))]
+    
     for i in range(1, len(Os)):
         Ot  = Os[i].copy()
         Ot  = O - Ot
@@ -98,8 +102,11 @@ def merge_sols(Os, silent=False):
         er1 = np.sum( Ot )
     
         Ot  = Os[i].copy()
-        Ot  = Ot[::-1, ::-1, ::-1]
-        Ot  = multiroll(Ot, [1,1,1])
+
+        # reverse each axis
+        Ot  = Ot[rev_slice]
+        
+        Ot  = multiroll(Ot, ones)
         Ot2  = O - Ot
         Ot2 = (Ot2 * Ot2.conj()).real
         er2 = np.sum( Ot2 )
@@ -113,7 +120,8 @@ def merge_sols(Os, silent=False):
     
     O = np.sum(Os, axis = 0) / float(Os.shape[0])
     if np.any(np.iscomplex(Os[0])):
-        angle = np.angle(np.fft.fftn(Os, axes=(1,2,3)))
+        axes = tuple(range(1, len(Os[0].shape)+1))
+        angle = np.angle(np.fft.fftn(Os, axes=axes))
         prft  = np.mean(np.exp(1.0J * angle), axis=0)
     else :
         prft = None
