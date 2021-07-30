@@ -7,7 +7,7 @@ def parse_cmdline_args():
     parser = argparse.ArgumentParser(prog = 'reconstruct.py', description='phase a merged 3D diffraction volume')
     parser.add_argument('config', type=str, \
                         help="file name of the configuration file")
-    parser.add_argument('-i', '--input', action='store_true', \
+    parser.add_argument('-i', '--input', action='store_false', \
                         help="generate the input file and exit")
     args = parser.parse_args()
 
