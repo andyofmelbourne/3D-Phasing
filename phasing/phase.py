@@ -151,7 +151,7 @@ def iters_string_to_alg_num(string):
 
 
 
-def phase(I, S, iters="100DM 100ERA", reality=False, callback=None):
+def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, callback_finished=None):
     ## Step #1. Obtain an OpenCL platform.
     for p in cl.get_platforms():
         devices = p.get_devices(cl.device_type.GPU)
@@ -179,10 +179,6 @@ def phase(I, S, iters="100DM 100ERA", reality=False, callback=None):
     fft  = reikna.fft.FFT(O)
     cfft = fft.compile(thr)
     
-    # initialise random object
-    O.set(amp.get() * np.exp(2J * np.pi * np.random.random(I.shape)).astype(np.complex64))
-    cfft(O, O, 1)
-
     # define projections
     if reality :
         DM_support  = prgs_build.DM_support_real 
@@ -192,6 +188,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, callback=None):
         ERA_support = prgs_build.ERA_support
     
     I_norm = np.sum(I)
+
     
     # Difference Map
     #---------------
@@ -238,15 +235,23 @@ def phase(I, S, iters="100DM 100ERA", reality=False, callback=None):
             if callback :
                 callback(O.get() * np.sqrt(I.size), i)
 	
-    # parse iteration sequence
-    seq = iters_string_to_alg_num(iters)
-    for s in seq:
-        if s[0] == 'ERA':
-            ERA(s[1])
-        elif s[0] == 'DM':
-            DM(s[1])
-        else :
-            raise ValueError('Could not parse iteration sequence string:' + iters)
+    for r in range(repeats):
+        # initialise random object
+        O.set(amp.get() * np.exp(2J * np.pi * np.random.random(I.shape)).astype(np.complex64))
+        cfft(O, O, 1)
+
+        # parse iteration sequence
+        seq = iters_string_to_alg_num(iters)
+        for s in seq:
+            if s[0] == 'ERA':
+                ERA(s[1])
+            elif s[0] == 'DM':
+                DM(s[1])
+            else :
+                raise ValueError('Could not parse iteration sequence string:' + iters)
+        
+        if callback_finished :
+            callback_finished(O.get() * np.sqrt(I.size))
     
     return O.get() * np.sqrt(I.size)
       
@@ -260,11 +265,15 @@ if __name__ == '__main__':
         if i % args.update_freq == 0:
             pickle.dump({'object_partial': O}, args.output)
     
+    def output(O):
+        pickle.dump({'object': O}, args.output)
+    
     if args.update_freq == 0 :
         pipe = None
+        output = None
     
-    for i in range(args.repeats):
-        O = phase(I, S, ' '.join(args.iters), reality=args.reality, callback=pipe)
+    O = phase(I, S, ' '.join(args.iters), reality=args.reality, repeats=args.repeats, callback=pipe, callback_finished=output)
+
+    output(O)
         
-        pickle.dump({'object': O}, args.output)
 
