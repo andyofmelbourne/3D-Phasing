@@ -98,7 +98,8 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
     f.create_dataset('data retrieved', chunks = diff.shape, data = diff_ret, compression='gzip')
     f.create_dataset('sample support', chunks = support.shape, data = support.astype(np.int16), compression='gzip')
     f.create_dataset('sample support retrieved', chunks = support_ret.shape, data = support_ret, compression='gzip')
-    f.create_dataset('good pixels', chunks = good_pix.shape, data = good_pix.astype(np.int16), compression='gzip')
+    if good_pix is not None :
+        f.create_dataset('good pixels', chunks = good_pix.shape, data = good_pix.astype(np.int16), compression='gzip')
     f.create_dataset('modulus error', chunks = emods.shape, data = emods, compression='gzip')
     f.create_dataset('convergence metric', chunks = econs.shape, data = np.array(econs), compression='gzip')
     if efids is not None :
@@ -106,7 +107,8 @@ def write_output_h5(path, diff, diff_ret, support, support_ret, \
         f.create_dataset('fidelity error', chunks = efids.shape, data = efids, compression='gzip')
     else :
         f.create_dataset('fidelity error', chunks = emods.shape, data = -np.ones_like(emods), compression='gzip')
-    f.create_dataset('sample init', chunks = solid_unit.shape, data = solid_unit, compression='gzip')
+    if solid_unit is not None :
+        f.create_dataset('sample init', chunks = solid_unit.shape, data = solid_unit, compression='gzip')
     f.create_dataset('sample retrieved', chunks = (1,) + solid_units_ret.shape[1 :], data = solid_units_ret, compression='gzip')
     if PRTF is not None and PRTF_rav is not None :
         f.create_dataset('PRTF', chunks = PRTF.shape, data = PRTF, compression='gzip')

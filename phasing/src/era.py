@@ -144,15 +144,11 @@ def ERA(I, iters, **args):
         # ------------------
         modes = mapper.Pmod(modes)
 
-        modes1 = modes.copy()
-        
         # support projection 
         # ------------------
         modes = mapper.Psup(modes)
         
         # metrics
-        #modes1 -= modes0
-        #eMod    = mapper.l2norm(modes1, modes0)
         eMod    = mapper.Emod(modes)
         
         modes0 -= modes
