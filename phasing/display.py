@@ -8,7 +8,8 @@ parser.add_argument('-p', '--pipe_through', action='store_true', \
                     help="pipe input to output before display")
 parser.add_argument('-a', '--accumulate', action='store_true', \
                     help="Accumulate named data for display (as an image stack)")
-
+parser.add_argument('-n', '--name', type=str, \
+                    help="Only show datasets with the key 'name'")
 parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                     help="Python pickle file containing data")
 parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
@@ -36,7 +37,7 @@ class Get_piped_data(QObject):
         for name, value in d.items():
             if isinstance(value, dict):
                 self.recurse_dict(value)
-            else :
+            elif args.name is None or args.name == name :
                 # accumulate 2D arrays (very specific...)
                 if args.accumulate: 
                     if name in self.data and \
@@ -65,7 +66,7 @@ class Get_piped_data(QObject):
                 if isinstance(package, dict) : 
                     self.recurse_dict(package)
                 
-                else :
+                elif args.name is None :
                     name = 'unamed data'
                     self.data[name] = package
                     self.data_recieved.emit(name)
