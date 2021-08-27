@@ -12,5 +12,5 @@ dependencies:
   - pyopencl
   - pip
   - ipython
-  - mpi4py
   - configparser
+  - prody
