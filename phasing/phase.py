@@ -270,6 +270,8 @@ if __name__ == '__main__':
     
     if args.update_freq == 0 :
         pipe = None
+        
+    if args.repeats == 0 :
         output = None
     
     O = phase(I, S, ' '.join(args.iters), reality=args.reality, repeats=args.repeats, callback=pipe, callback_finished=output)
