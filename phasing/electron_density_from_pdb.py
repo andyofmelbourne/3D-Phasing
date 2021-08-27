@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 description = "Calculate the number of electrons per cubic angstrom from the molecule decribed in a pdb file. Data is writen as a python pickle to stdout."
 parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -16,7 +17,6 @@ args = parser.parse_args()
 # delay these imports to speed up argparsing
 from .density_calculator_intelHD import render_molecule_from_pdb
 import pickle
-import sys
 
 
 if __name__ == '__main__':
