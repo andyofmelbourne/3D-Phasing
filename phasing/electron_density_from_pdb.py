@@ -15,7 +15,7 @@ parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.
 args = parser.parse_args()
 
 # delay these imports to speed up argparsing
-from .density_calculator_intelHD import render_molecule_from_pdb
+from phasing import render_molecule_from_pdb
 import pickle
 
 
