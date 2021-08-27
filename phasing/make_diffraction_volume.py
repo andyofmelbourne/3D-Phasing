@@ -18,10 +18,14 @@ description = "Calculate the diffraction volume of a molecule from its electron 
 parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-s', '--support_threshold', type=float, default=1e-7, \
                     help="Values above this threshold are included in the support volume (1 for inside molecule and 0 otherwise)")
+parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
+                    help="Python pickle file containing a dictionary with keys 'electron_density' and 'voxel_size'")
+parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
+                    help="Python pickle output file. The result is written as a dictionary with the keys 'intensity', 'support' and 'voxel_size'")
 args = parser.parse_args()
 
 # 1. read in electron density from stdin
-pipe = pickle.load(sys.stdin.buffer)
+pipe = pickle.load(args.input)
 den = pipe['electron_density']
 vox = pipe['voxel_size']
 
@@ -36,13 +40,6 @@ S = den2 > args.support_threshold
 # normalised to approximate the continuous fourier trasform I = | int rho(x,y,z) e^{-2pi i r . q} dx dy dz |^2
 I = np.abs(vox**3 * np.fft.fftn(den2))**2
 
-print('number of electrons: {:.2e}'.format(vox**3*np.sum(den)), file=sys.stderr)
-print('voxel_size:', vox, file=sys.stderr)
-print('I.dtype  : {}'.format(I.dtype), file=sys.stderr)
-print('mean(rho)  : {:.2e}'.format(np.mean(den)), file=sys.stderr)
-print('I[0]  : {:.2e}'.format(I[0,0,0]), file=sys.stderr)
-print('sum I : {:.2e}'.format(np.sum(I)), file=sys.stderr)
-
-pickle.dump({'intensity': I, 'support': S, 'voxel_size': vox}, sys.stdout.buffer)
+pickle.dump({'intensity': I, 'support': S, 'voxel_size': vox}, args.output)
 
 
