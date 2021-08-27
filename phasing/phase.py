@@ -195,7 +195,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     def DM(DM_iters):
         it = tqdm.tqdm(range(DM_iters), desc='IPA DM', file=sys.stderr)
         for i in it:
-            launch = DM_support(queue, (O.size,), None, O.base_data, O2.base_data, S.base_data)
+            launch = DM_support(queue, (O.size,), None, O.data, O2.data, S.data)
             
             cfft(O2, O2)
             
@@ -203,11 +203,11 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             err = np.sqrt(cl.array.sum( (amp - abs(O2))**2 ).get()[()]/I_norm)
             it.set_description('IPA DM {:.2e}'.format(err))
             
-            launch = prgs_build.Pmod(queue, (O.size,), None, O2.base_data, amp.base_data)
+            launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data)
             
             cfft(O2, O2, 1)
             
-            launch = prgs_build.DM_update(queue, (O.size,), None, O.base_data, O2.base_data)
+            launch = prgs_build.DM_update(queue, (O.size,), None, O.data, O2.data)
             
             queue.finish()
 
