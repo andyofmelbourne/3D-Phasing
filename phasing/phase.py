@@ -48,6 +48,33 @@ import time
 prgs_code = r"""//CL//
 #include <pyopencl-complex.h>
 
+__kernel void amp_err (
+    __global const cfloat_t *O, 
+    __global const float *amp, 
+    __global float *t
+    )
+{
+int i = get_global_id(0);
+
+t[i] = amp[i] - sqrt(O[i].x * O[i].x + O[i].y * O[i].y);
+t[i] *= t[i];
+}
+
+__kernel void amp_err2 (
+    __global float *t,
+    __global float *err,
+    const float I_norm,
+    const int N
+    )
+{
+int n;
+float tt = 0;
+
+for (n = 0; n < N; n++){ 
+    tt += t[n];
+}
+err[0] = sqrt(tt/I_norm);
+}
 
 __kernel void DM_support (
     __global cfloat_t *O, 
@@ -173,6 +200,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     O   = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     O2  = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     amp = cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
+    amp2= cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
+    errg= cl.array.to_device(queue, np.ascontiguousarray(np.empty((1,), dtype=np.float32)))
     S   = cl.array.to_device(queue, np.ascontiguousarray(S.astype(np.int8)))
     
     # initialise fft routine
@@ -200,8 +229,11 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             cfft(O2, O2)
             
             # print error
-            err = np.sqrt(cl.array.sum( (amp - abs(O2))**2 ).get()[()]/I_norm)
-            it.set_description('IPA DM {:.2e}'.format(err))
+            if i == (DM_iters - 1) :
+                launch = prgs_build.amp_err(queue, (O.size,), None, O.data, amp.data, amp2.data)
+                launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
+                launch.wait()
+                it.set_description('IPA ERA {:.2e}'.format(errg.get()[0]))
             
             launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data)
             
@@ -224,8 +256,11 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             cfft(O, O)
             
             # print error
-            err = np.sqrt(np.sum( (amp.get() - np.abs(O.get()))**2 )/I_norm)
-            it.set_description('IPA ERA {:.2e}'.format(err))
+            if i == (ERA_iters - 1) :
+                launch = prgs_build.amp_err(queue, (O.size,), None, O.data, amp.data, amp2.data)
+                launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
+                launch.wait()
+                it.set_description('IPA ERA {:.2e}'.format(errg.get()[0]))
             
             launch = prgs_build.Pmod(queue, (O.size,), None, O.data, amp.data)
             
