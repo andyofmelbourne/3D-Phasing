@@ -229,11 +229,11 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             cfft(O2, O2)
             
             # print error
-            if i == (DM_iters - 1) :
+            if False : #i == (DM_iters - 1) :
                 launch = prgs_build.amp_err(queue, (O2.size,), None, O2.data, amp.data, amp2.data)
                 launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
                 launch.wait()
-                it.set_description('IPA ERA {:.2e}'.format(errg.get()[0]))
+                it.set_description('IPA DM {:.2e}'.format(errg.get()[0]))
             
             launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data)
             
@@ -256,7 +256,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             cfft(O, O)
             
             # print error
-            if i == (ERA_iters - 1) :
+            if False : #i == (ERA_iters - 1) :
                 launch = prgs_build.amp_err(queue, (O.size,), None, O.data, amp.data, amp2.data)
                 launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
                 launch.wait()
