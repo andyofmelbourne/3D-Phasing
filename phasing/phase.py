@@ -230,7 +230,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             
             # print error
             if i == (DM_iters - 1) :
-                launch = prgs_build.amp_err(queue, (O.size,), None, O.data, amp.data, amp2.data)
+                launch = prgs_build.amp_err(queue, (O2.size,), None, O2.data, amp.data, amp2.data)
                 launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
                 launch.wait()
                 it.set_description('IPA ERA {:.2e}'.format(errg.get()[0]))
