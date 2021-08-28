@@ -197,6 +197,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     prgs_build = cl.Program(context, prgs_code).build()
     
     #cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a_np)
+    Oc  = np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64))
     O   = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     O2  = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     amp = cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
@@ -286,7 +287,9 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
                 raise ValueError('Could not parse iteration sequence string:' + iters)
         
         if callback_finished :
-            callback_finished(O.get() * np.sqrt(I.size))
+            cl.enqueue_copy(queue, Oc, O)
+            callback_finished(Oc * np.sqrt(I.size))
+            #callback_finished(O.get() * np.sqrt(I.size))
     
     return O.get() * np.sqrt(I.size)
       
