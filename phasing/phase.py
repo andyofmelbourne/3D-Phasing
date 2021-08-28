@@ -287,7 +287,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
                 raise ValueError('Could not parse iteration sequence string:' + iters)
         
         if callback_finished :
-            cl.enqueue_copy(queue, Oc, O)
+            cl.enqueue_copy(queue, Oc, O.data)
             callback_finished(Oc * np.sqrt(I.size))
             #callback_finished(O.get() * np.sqrt(I.size))
     
