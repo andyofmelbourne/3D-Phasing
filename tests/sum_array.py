@@ -39,23 +39,21 @@ __kernel void sum2 (
 
 int n;
 int i = get_global_id(0);
-int dn = (N+1)/W;
+int dn = (N+1)/max_workers;
 
-local float tt[W];
+local float tt[max_workers];
 
 tt[i] = 0.;
 
 for (n = i*dn; n < min((i+1)*dn, N); n++){ 
     tt[i] += O[n];
-    //if (i==0)
-    //    printf(" %i %i %i %f \n", i, W, dn, tt[i]);
 }
 
 barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
 if (i==0){
 float ttt = 0.;
-for (n = 0; n < W; n++){ 
+for (n = 0; n < max_workers; n++){ 
     ttt += tt[n];
 }
 err[0] = ttt;
@@ -74,7 +72,7 @@ __kernel void sum3 (
 
 ## Step #1. Obtain an OpenCL platform.
 for p in cl.get_platforms():
-    devices = p.get_devices(cl.device_type.GPU)
+    devices = p.get_devices(cl.device_type.CPU)
     if len(devices) > 0:
         platform = p
         device   = devices[0]
@@ -91,7 +89,7 @@ queue   = cl.CommandQueue(context)
 api = cluda.ocl_api()
 thr = api.Thread(queue)
 
-prgs_build = cl.Program(context, f"__constant int W = {max_workers};\n" + prgs_code).build()
+prgs_build = cl.Program(context, f"#define max_workers {max_workers}\n" + prgs_code).build()
 
 #cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a_np)
 Oc   = np.ascontiguousarray(np.random.random((128,128,128)).astype(np.float32))

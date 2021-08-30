@@ -51,13 +51,38 @@ prgs_code = r"""//CL//
 __kernel void amp_err (
     __global const cfloat_t *O, 
     __global const float *amp, 
-    __global float *t
+    const float I_norm, 
+    const int N, 
+    __global float *result
     )
 {
 int i = get_global_id(0);
+int n;
+int dn = (N+1)/max_workers;
+float t = 0.;
 
-t[i] = amp[i] - sqrt(O[i].x * O[i].x + O[i].y * O[i].y);
-t[i] *= t[i];
+local float temp[max_workers];
+
+temp[i] = 0.;
+
+// each worker sums a bit
+for (n = i*dn; n < min((i+1)*dn, N); n++){ 
+    t = amp[i] - sqrt(O[i].x * O[i].x + O[i].y * O[i].y);
+    temp[i] = t*t;
+}
+
+barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+// worker 0 sums the sums
+if (i==0){
+t = 0.;
+for (n = 0; n < max_workers; n++){ 
+    t += temp[n];
+}
+result[0] = sqrt(t/I_norm);
+}
+
+
 }
 
 __kernel void amp_err2 (
@@ -186,6 +211,7 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             platform = p
             device   = devices[0]
             break
+    max_workers = device.max_work_item_sizes[0]
     
     ## Step #3. Create a context for the selected device.
     context = cl.Context([device])
@@ -194,7 +220,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     api = cluda.ocl_api()
     thr = api.Thread(queue)
     
-    prgs_build = cl.Program(context, prgs_code).build()
+    # add this definition to allow for variable length arrays
+    prgs_build = cl.Program(context, f"#define max_workers {max_workers}\n" + prgs_code).build()
     
     #cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a_np)
     Oc  = np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64))
@@ -202,7 +229,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     O2  = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     amp = cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
     amp2= cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
-    errg= cl.array.to_device(queue, np.ascontiguousarray(np.empty((1,), dtype=np.float32)))
+    err = np.ascontiguousarray(np.empty((1,), dtype=np.float32))
+    errg= cl.array.to_device(queue, err)
     S   = cl.array.to_device(queue, np.ascontiguousarray(S.astype(np.int8)))
     
     # initialise fft routine
@@ -218,6 +246,16 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
         ERA_support = prgs_build.ERA_support
     
     I_norm = np.sum(I)
+
+    def calc_amp_err(o):
+        launch = prgs_build.amp_err(queue, 
+                                   (max_workers,), (max_workers,), 
+                                   o.data, amp.data, 
+                                   np.float32(I_norm), np.int32(o.size), 
+                                   errg.data)
+        launch.wait()
+        cl.enqueue_copy(queue, err, errg.data)
+        return err[0]
     
     # Difference Map
     #---------------
@@ -228,12 +266,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             
             cfft(O2, O2)
             
-            # print error
-            if False : #i == (DM_iters - 1) :
-                launch = prgs_build.amp_err(queue, (O2.size,), None, O2.data, amp.data, amp2.data)
-                launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
-                launch.wait()
-                it.set_description('IPA DM {:.2e}'.format(errg.get()[0]))
+            if True : #i == (DM_iters - 1) :
+                it.set_description('IPA DM {:.2e}'.format(calc_amp_err(O2)))
             
             launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data)
             
@@ -256,12 +290,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             
             cfft(O, O)
             
-            # print error
-            if False : #i == (ERA_iters - 1) :
-                launch = prgs_build.amp_err(queue, (O.size,), None, O.data, amp.data, amp2.data)
-                launch = prgs_build.amp_err2(queue, (1,), (1,), amp2.data, errg.data, np.float32(I_norm), np.int32(O.size))
-                launch.wait()
-                it.set_description('IPA ERA {:.2e}'.format(errg.get()[0]))
+            if True : #i == (ERA_iters - 1) :
+                it.set_description('IPA DM {:.2e}'.format(calc_amp_err(O2)))
             
             launch = prgs_build.Pmod(queue, (O.size,), None, O.data, amp.data)
             
