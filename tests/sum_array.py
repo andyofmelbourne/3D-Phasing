@@ -39,24 +39,23 @@ __kernel void sum2 (
 
 int n;
 int i = get_global_id(0);
-int w = get_local_size(0);
-int dn = (N+1)/w;
+int dn = (N+1)/W;
 
-local float tt[32];
+local float tt[W];
 
 tt[i] = 0.;
 
 for (n = i*dn; n < min((i+1)*dn, N); n++){ 
     tt[i] += O[n];
     //if (i==0)
-    //    printf(" %i %i %i %f \n", i, w, dn, tt[i]);
+    //    printf(" %i %i %i %f \n", i, W, dn, tt[i]);
 }
 
 barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
 if (i==0){
 float ttt = 0.;
-for (n = 0; n < w; n++){ 
+for (n = 0; n < W; n++){ 
     ttt += tt[n];
 }
 err[0] = ttt;
@@ -92,7 +91,7 @@ queue   = cl.CommandQueue(context)
 api = cluda.ocl_api()
 thr = api.Thread(queue)
 
-prgs_build = cl.Program(context, prgs_code).build()
+prgs_build = cl.Program(context, f"__constant int W = {max_workers};\n" + prgs_code).build()
 
 #cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a_np)
 Oc   = np.ascontiguousarray(np.random.random((128,128,128)).astype(np.float32))
