@@ -218,7 +218,6 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
         ERA_support = prgs_build.ERA_support
     
     I_norm = np.sum(I)
-
     
     # Difference Map
     #---------------
@@ -245,7 +244,8 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             queue.finish()
 
             if callback :
-                callback(O.get() * np.sqrt(I.size), i)
+                cl.enqueue_copy(queue, Oc, O.data)
+                callback(Oc * np.sqrt(I.size), i)
 
     # Error Reduction
     #----------------
@@ -269,11 +269,13 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
             queue.finish()
             
             if callback :
-                callback(O.get() * np.sqrt(I.size), i)
+                cl.enqueue_copy(queue, Oc, O.data)
+                callback(Oc * np.sqrt(I.size), i)
 	
     for r in range(repeats):
         # initialise random object
-        O.set(amp.get() * np.exp(2J * np.pi * np.random.random(I.shape)).astype(np.complex64))
+        Oc[:] = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape)).astype(np.complex64)
+        cl.enqueue_copy(queue, O.data, Oc)
         cfft(O, O, 1)
 
         # parse iteration sequence
