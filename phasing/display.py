@@ -25,7 +25,27 @@ import pyqtgraph as pg
 import numpy as np
 import pickle
 import signal
+import numbers
 
+def accumulator_init(value):
+    if isinstance(value, np.ndarray) and len(value.shape) == 1:
+        return value
+    elif isinstance(value, np.ndarray) and len(value.shape) == 2:
+        return value[None, ...]
+    elif isinstance(value, numbers.Number):
+        return np.array([value,])
+    else :
+        return value
+
+def accumulator(data, value):
+    if isinstance(value, np.ndarray) and len(value.shape) == 1:
+        return np.append(data, value)
+    elif isinstance(value, np.ndarray) and len(value.shape) == 2:
+        return np.append(data, value[None, ...], axis=0)
+    elif isinstance(value, numbers.Number):
+        return np.append(data, value)
+    else :
+        return value
 
 class Get_piped_data(QObject):
     finished = pyqtSignal()
@@ -38,14 +58,11 @@ class Get_piped_data(QObject):
             if isinstance(value, dict):
                 self.recurse_dict(value)
             elif args.name is None or args.name == name :
-                # accumulate 2D arrays (very specific...)
-                if args.accumulate: 
-                    if name in self.data and \
-                           isinstance(self.data[name], np.ndarray) and \
-                           len(self.data[name].shape) == 3:
-                        self.data[name] = np.append(self.data[name], value[None, ...], axis=0)
+                if args.accumulate :
+                    if name in self.data :
+                        self.data[name] = accumulator(self.data[name], value)
                     else :
-                        self.data[name] = value[None, ...]
+                        self.data[name] = accumulator_init(value)
                 else :
                     self.data[name] = value
                 
@@ -73,7 +90,7 @@ class Get_piped_data(QObject):
                 
             except EOFError :
                 break
-            
+             
             except Exception as e :
                 print(e, file=sys.stderr)
         self.finished.emit() 
@@ -114,6 +131,17 @@ class Main():
                     dtype = np.uint8
                 
                 self.plots[name].setImage(self.worker.data[name].real.astype(dtype))
+            elif len(self.worker.data[name].shape) == 1:
+                if name not in self.plots :
+                    self.plots[name] = pg.PlotWidget(title=name)
+                    self.plots[name].show()
+                
+                # convert bool to uint8 for display
+                dtype = self.worker.data[name].real.dtype
+                if dtype == bool : 
+                    dtype = np.uint8
+                
+                self.plots[name].plot(self.worker.data[name].real.astype(dtype))
 
 if __name__ == '__main__':
     # allow Control-C

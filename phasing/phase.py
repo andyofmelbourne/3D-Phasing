@@ -8,6 +8,8 @@ if __name__ == '__main__':
                         help="repeat the iteration sequence this many times")
     parser.add_argument('-r', '--reality', action='store_true', \
                         help="Enforce reality of the object at each iteration")
+    parser.add_argument('-v', '--voxel_number', type=int, \
+                        help="Use the voxel number support projection with given number of voxels")
     parser.add_argument('--iters', default=["100DM", "100ERA"], nargs='*', \
                         help="Iteration sequence for the algorith")
     parser.add_argument('-u', '--update_freq', type=int, default=0, \
@@ -29,6 +31,41 @@ import pickle
 import re
 import time
 
+def choose_N_highest_pixels(array, N, tol = 1.0e-5, maxIters=1000, support=None):
+    """
+    Use bisection to find the root of
+    e(x) = \sum_i (array_i > x) - N
+    then return (array_i > x) a boolean mask
+    This is faster than using percentile (surprising)
+    If support is not None then values outside the support
+    are ignored. 
+    """
+    s0 = array.max()
+    s1 = array.min()
+
+    if support is not None :
+        a = array[support > 0]
+    else :
+        a = array
+        support = 1
+    
+    for i in range(maxIters):
+        s = (s0 + s1) / 2.
+        e = np.sum(a > s) - N
+    
+        if np.abs(e) < tol :
+            break
+
+        if e < 0 :
+            s0 = s
+        else :
+            s1 = s
+        
+    S = (array > s) * support
+    print(s, array.min(), array.max(), S.size, np.argmax(array))
+    #print 'number of pixels in support:', np.sum(support), i, s, e
+    return S
+
 #    Difference Map
 #       modes += mapper.Pmod(modes_sup * 2 - modes) - modes_sup
 #    1.
@@ -48,6 +85,116 @@ import time
 prgs_code = r"""//CL//
 #include <pyopencl-complex.h>
 
+__kernel void voxel_number_mask (
+    __global const cfloat_t* O, 
+    __global char* S, 
+    const int NV,
+    const int N
+    )
+{
+int i = get_global_id(0);
+int n, j;
+int dn = N/max_workers + 1;
+float t, a;
+
+local float minmax[max_workers];
+local int temp[max_workers];
+local int tot;
+local float s, s0, s1;
+
+// find the minimum and maximum value of |O|^2
+minmax[i] = 0.;
+for (n = i*dn; n < min((i+1)*dn, N); n++){ 
+    t = O[n].x * O[n].x + O[n].y * O[n].y;
+    if (t>minmax[i])
+        minmax[i]=t;
+}
+
+barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+if (i==0){
+    s1 = 0.;
+    for (n = 0; n < max_workers; n++){ 
+        if (minmax[n]>s1)
+            s1 = minmax[n];
+    }
+}
+
+barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+minmax[i] = FLT_MAX;
+for (n = i*dn; n < min((i+1)*dn, N); n++){ 
+    t = O[n].x * O[n].x + O[n].y * O[n].y;
+    if (t<minmax[i])
+        minmax[i]=t;
+}
+
+barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+if (i==0){
+    s0 = FLT_MAX;;
+    for (n = 0; n < max_workers; n++){ 
+        if (minmax[n]<s0)
+            s0 = minmax[n];
+    }
+}
+
+
+barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+for (j=0; j<100; j++){
+    if (i==0)
+        s = (s0 + s1)/2.;
+    
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+    
+    // sum |O|^2 > s
+    // each worker sums a bit
+    temp[i] = 0.;
+    for (n = i*dn; n < min((i+1)*dn, N); n++){ 
+        t = O[n].x * O[n].x + O[n].y * O[n].y;
+        if (t>s)
+            temp[i]++;
+    }
+    
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+    
+    // worker 0 sums the sums
+    if (i==0){
+        tot = -NV;
+        for (n = 0; n < max_workers; n++){ 
+            tot += temp[n];
+        }
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+    
+    //if (i==0)
+    //    printf("%i %f %f %f %i\n", j, s0, s, s1, tot);
+    
+    if (tot==0) {
+        // Fill S
+        for (n = i*dn; n < min((i+1)*dn, N); n++){ 
+            t = O[n].x * O[n].x + O[n].y * O[n].y;
+            if (t>s) 
+                S[n] = 1;
+            else 
+                S[n] = 0;
+        }
+        break;
+    }
+    
+    if (i==0){
+        if (tot>0)
+            s0 = s;
+        else 
+            s1 = s;
+    }
+        
+}
+}
+
+
 __kernel void amp_err (
     __global const cfloat_t *O, 
     __global const float *amp, 
@@ -58,7 +205,7 @@ __kernel void amp_err (
 {
 int i = get_global_id(0);
 int n;
-int dn = (N+1)/max_workers;
+int dn = N/max_workers + 1;
 float t = 0.;
 
 local float temp[max_workers];
@@ -67,7 +214,7 @@ temp[i] = 0.;
 
 // each worker sums a bit
 for (n = i*dn; n < min((i+1)*dn, N); n++){ 
-    t = amp[i] - sqrt(O[i].x * O[i].x + O[i].y * O[i].y);
+    t = amp[n] - sqrt(O[n].x * O[n].x + O[n].y * O[n].y);
     temp[i] = t*t;
 }
 
@@ -83,22 +230,6 @@ result[0] = sqrt(t/I_norm);
 }
 
 
-}
-
-__kernel void amp_err2 (
-    __global float *t,
-    __global float *err,
-    const float I_norm,
-    const int N
-    )
-{
-int n;
-float tt = 0;
-
-for (n = 0; n < N; n++){ 
-    tt += t[n];
-}
-err[0] = sqrt(tt/I_norm);
 }
 
 __kernel void DM_support (
@@ -140,15 +271,18 @@ O2[i].y = -O[i].y;
 
 __kernel void Pmod (
     __global cfloat_t *O, 
-    __global const float *amp 
+    __global const float *amp,
+    __global const char *mask
     )
 {
 int i = get_global_id(0);
 
+if (mask[i] == 1){
 float angle = atan2(O[i].y, O[i].x);
 
 O[i].x = amp[i] * cos(angle);
 O[i].y = amp[i] * sin(angle);
+}
 
 }
 
@@ -203,7 +337,7 @@ def iters_string_to_alg_num(string):
 
 
 
-def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, callback_finished=None):
+def phase(I, S=None, mask=None, iters="100DM 100ERA", reality=False, repeats=1, voxel_number = None, callback=None, callback_finished=None):
     ## Step #1. Obtain an OpenCL platform.
     for p in cl.get_platforms():
         devices = p.get_devices(cl.device_type.GPU)
@@ -228,10 +362,19 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     O   = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     O2  = cl.array.to_device(queue, np.ascontiguousarray(np.empty(I.shape, dtype=np.complex64)))
     amp = cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
-    amp2= cl.array.to_device(queue, np.ascontiguousarray(np.sqrt(I).astype(np.float32)))
     err = np.ascontiguousarray(np.empty((1,), dtype=np.float32))
     errg= cl.array.to_device(queue, err)
-    S   = cl.array.to_device(queue, np.ascontiguousarray(S.astype(np.int8)))
+    
+    if voxel_number :
+        S   = cl.array.to_device(queue, np.ascontiguousarray(np.zeros(I.shape, dtype=np.int8)))
+    else :
+        S   = cl.array.to_device(queue, np.ascontiguousarray(S.astype(np.int8)))
+    
+    if mask :
+        mask   = cl.array.to_device(queue, np.ascontiguousarray(mask.astype(np.int8)))
+    else :
+        mask   = cl.array.to_device(queue, np.ascontiguousarray(np.ones(I.shape, dtype=np.int8)))
+        
     
     # initialise fft routine
     fft  = reikna.fft.FFT(O)
@@ -262,43 +405,53 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
     def DM(DM_iters):
         it = tqdm.tqdm(range(DM_iters), desc='IPA DM', file=sys.stderr)
         for i in it:
+            if voxel_number :
+                l = prgs_build.voxel_number_mask(queue, (max_workers,), (max_workers,), O.data, S.data, np.int32(voxel_number), np.int32(O.size))
+            
             launch = DM_support(queue, (O.size,), None, O.data, O2.data, S.data)
             
             cfft(O2, O2)
             
-            it.set_description('IPA DM {:.2e}'.format(calc_amp_err(O2)))
+            amp_err = calc_amp_err(O2)
+            it.set_description('IPA DM {:.2e}'.format(amp_err))
             
-            launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data)
+            launch = prgs_build.Pmod(queue, (O.size,), None, O2.data, amp.data, mask.data)
             
             cfft(O2, O2, 1)
             
             launch = prgs_build.DM_update(queue, (O.size,), None, O.data, O2.data)
             
             queue.finish()
-
+            
             if callback :
                 cl.enqueue_copy(queue, Oc, O.data)
-                callback(Oc * np.sqrt(I.size), i)
+                callback(Oc * np.sqrt(I.size), amp_err, i)
+        return amp_err
 
     # Error Reduction
     #----------------
     def ERA(ERA_iters):
         it = tqdm.tqdm(range(ERA_iters), desc='IPA ERA', file=sys.stderr)
         for i in it:
+            if voxel_number :
+                l = prgs_build.voxel_number_mask(queue, (max_workers,), (max_workers,), O.data, S.data, np.int32(voxel_number), np.int32(O.size))
+            
             launch = ERA_support(queue, (O.size,), None, O.data, S.data)
             
             cfft(O, O)
             
-            it.set_description('IPA DM {:.2e}'.format(calc_amp_err(O)))
+            amp_err = calc_amp_err(O)
+            it.set_description('IPA ERA {:.2e}'.format(amp_err))
             
-            launch = prgs_build.Pmod(queue, (O.size,), None, O.data, amp.data)
+            launch = prgs_build.Pmod(queue, (O.size,), None, O.data, amp.data, mask.data)
             
             cfft(O, O, 1)
             queue.finish()
             
             if callback :
                 cl.enqueue_copy(queue, Oc, O.data)
-                callback(Oc * np.sqrt(I.size), i)
+                callback(Oc * np.sqrt(I.size), amp_err, i)
+        return amp_err
 	
     for r in range(repeats):
         # initialise random object
@@ -310,16 +463,15 @@ def phase(I, S, iters="100DM 100ERA", reality=False, repeats=1, callback=None, c
         seq = iters_string_to_alg_num(iters)
         for s in seq:
             if s[0] == 'ERA':
-                ERA(s[1])
+                amp_err = ERA(s[1])
             elif s[0] == 'DM':
-                DM(s[1])
+                amp_err = DM(s[1])
             else :
                 raise ValueError('Could not parse iteration sequence string:' + iters)
         
         if callback_finished :
             cl.enqueue_copy(queue, Oc, O.data)
-            callback_finished(Oc * np.sqrt(I.size))
-            #callback_finished(O.get() * np.sqrt(I.size))
+            callback_finished(Oc * np.sqrt(I.size), amp_err)
     
     return O.get() * np.sqrt(I.size)
       
@@ -327,23 +479,24 @@ if __name__ == '__main__':
     # 1. read in electron density from stdin
     pipe = pickle.load(args.input)
     I = pipe['intensity']
-    S = pipe['support']
+    if 'support' in pipe :
+        S = pipe['support']
+    else :
+        S = None
     
-    def pipe(O, i):
+    if 'mask' in pipe :
+        mask = pipe['mask']
+    else :
+        mask = None
+    
+    def pipe(O, err, i):
         if i % args.update_freq == 0:
-            pickle.dump({'object_partial': O}, args.output)
+            pickle.dump({'object_partial': O, 'error_partial': err}, args.output)
     
-    def output(O):
-        pickle.dump({'object': O}, args.output)
+    def output(O, err):
+        pickle.dump({'object': O, 'error': err}, args.output)
     
     if args.update_freq == 0 :
         pipe = None
         
-    if args.repeats == 0 :
-        output = None
-    
-    O = phase(I, S, ' '.join(args.iters), reality=args.reality, repeats=args.repeats, callback=pipe, callback_finished=output)
-
-    output(O)
-        
-
+    O = phase(I, S=S, iters=' '.join(args.iters), reality=args.reality, repeats=args.repeats, voxel_number = args.voxel_number, callback=pipe, callback_finished=output)

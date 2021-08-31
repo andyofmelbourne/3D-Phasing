@@ -160,7 +160,8 @@ def error(a, b, r, q):
 
 def grad(a, b, r, q):
     t  = -4J * np.pi * b * (a.conj() * mkramp(r, q) - b.conj())
-    return np.array([np.sum( qq * t.real ) for qq in q])
+    out = np.array([np.sum( qq * t.real ) for qq in q])
+    return out
 
 def grad_dot(d, a, b, r, q):
     g = grad(a, b, r, q)
@@ -173,7 +174,8 @@ def dHd(d, a, b, r, q):
         for j in range(len(r)):
             H.append(np.sum(q[i] * q[j] * t.real))
     H = np.array(H).reshape((len(r), len(r)))
-    return np.dot(d, np.dot(H, d))
+    out = np.dot(d, np.dot(H, d))
+    return out
 
 def cgls_align(Oth, oh):
     a = Oth.copy()
