@@ -68,11 +68,12 @@ __kernel void sum3 (
     )
 {
 }
+
 """
 
 ## Step #1. Obtain an OpenCL platform.
 for p in cl.get_platforms():
-    devices = p.get_devices(cl.device_type.CPU)
+    devices = p.get_devices(cl.device_type.GPU)
     if len(devices) > 0:
         platform = p
         device   = devices[0]
@@ -98,18 +99,22 @@ O    = cl.array.to_device(queue, Oc)
 err1c = np.ascontiguousarray(np.empty((1,), dtype=np.float32))
 err1  = cl.array.to_device(queue, err1c)
 
+N = 100
 import time
 t0 = time.time()
-for i in range(100):
+for i in range(N):
     err0 = np.sum(Oc)
-print(err0, time.time()-t0)
+print(err0, '{:.2e}'.format( (time.time()-t0)/N))
 
 t0 = time.time()
-for i in range(100):
+for i in range(N):
     #launch = prgs_build.sum1(queue, (1,), (1,), O.data, err1.data, np.int32(Oc.size))
     launch = prgs_build.sum2(queue, (max_workers,), (max_workers,), O.data, err1.data, np.int32(Oc.size))
+    #launch = prgs_build.sum3(queue, (max_workers,), (max_workers,), O.data, err1.data, np.int32(Oc.size))
+    #cl.enqueue_copy(queue, Oc, O.data)
+    #err1c = [np.sum(Oc)]
+    queue.finish()
 
-queue.finish()
 cl.enqueue_copy(queue, err1c, err1.data)
 #print(err1.get()[0], time.time()-t0)
-print(err1c[0], time.time()-t0)
+print(err1c[0], '{:.2e}'.format( (time.time()-t0)/N))
