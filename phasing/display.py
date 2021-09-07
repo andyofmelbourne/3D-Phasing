@@ -10,6 +10,8 @@ parser.add_argument('-a', '--accumulate', action='store_true', \
                     help="Accumulate named data for display (as an image stack)")
 parser.add_argument('-n', '--name', type=str, \
                     help="Only show datasets with the key 'name'")
+parser.add_argument('-d', '--display_style', type=str, nargs='*',\
+                    help="Select the display style for named datasets, e.g. '-d object=1'")
 parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                     help="Python pickle file containing data")
 parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
@@ -26,6 +28,9 @@ import numpy as np
 import pickle
 import signal
 import numbers
+
+import phasing.display_widgets 
+from phasing.display_widgets import Default_2D, D1
 
 def accumulator_init(value):
     if isinstance(value, np.ndarray) and len(value.shape) == 1:
@@ -97,7 +102,16 @@ class Get_piped_data(QObject):
         
 
 class Main():
-    def __init__(self):
+    def __init__(self, display_styles=None):
+        
+        if display_styles :
+            self.display_styles = {}
+            for ds in display_styles:
+                name, style = ds.split('=')
+                if style == '1' :
+                    style = D1
+                
+                self.display_styles[name] = style
         
         # Step 2: Create a QThread object
         self.thread = QThread()
@@ -118,31 +132,22 @@ class Main():
  
     def show_data(self, name):
         if isinstance(self.worker.data[name], np.ndarray): 
-            if len(self.worker.data[name].shape) in (2,3):
-                if name not in self.plots :
-                    self.plots[name] = pg.ImageView(view = pg.PlotItem(title=name))
-                    self.plots[name].ui.menuBtn.hide()
-                    self.plots[name].ui.roiBtn.hide()
-                    self.plots[name].show()
+            # initialise display widgets
+            # --------------------------
+            if name not in self.plots :
+                dim = len(self.worker.data[name].shape)
+                    
+                if self.display_styles and name in self.display_styles:
+                    self.plots[name] = self.display_styles[name](name, self.worker.data[name])
+                elif dim in (2,3):
+                    self.plots[name] = Default_2D(name, self.worker.data[name])
+                elif dim == 1:
+                    self.plots[name] = Default_1D(name, self.worker.data[name])
                 
-                # convert bool to uint8 for display
-                dtype = self.worker.data[name].real.dtype
-                if dtype == bool : 
-                    dtype = np.uint8
-                
-                self.plots[name].setImage(self.worker.data[name].real.astype(dtype))
-            elif len(self.worker.data[name].shape) == 1:
-                if name not in self.plots :
-                    self.plots[name] = pg.PlotWidget(title=name)
-                    self.plots[name].show()
-                
-                # convert bool to uint8 for display
-                dtype = self.worker.data[name].real.dtype
-                if dtype == bool : 
-                    dtype = np.uint8
-                
-                self.plots[name].plot(self.worker.data[name].real.astype(dtype))
-
+            # update display data
+            # -------------------
+            self.plots[name].update(self.worker.data[name])
+    
 if __name__ == '__main__':
     # allow Control-C
     signal.signal(signal.SIGINT, signal.SIG_DFL) 
@@ -150,6 +155,6 @@ if __name__ == '__main__':
     # launch a GUI that will process incomming data
     app = QApplication([])
     
-    m = Main()
+    m = Main(args.display_style)
     
     app.exec_()

@@ -26,17 +26,21 @@ if __name__ == '__main__':
 import numpy as np
 import pyopencl as cl
 import pyopencl.array 
-import reikna.cluda as cluda
-import reikna.fft
 import tqdm
 import pickle
-import time
 
 import phasing.phase_routines
+from phasing.phase_routines import (Opencl_init, 
+                                    Support_projection, 
+                                    Data_projection,  
+                                    generator_from_iters_string)
 
-from phasing.phase_routines import Opencl_init, Support_projection, Data_projection, generator_from_iters_string
-
-def phase(I, S=None, mask=None, iters="100DM 100ERA", reality=False, radial_background_correction = False, voxel_number = None, callback=None, callback_finished=None, update_freq=None):
+def phase(
+    I, S=None, mask=None, iters="100DM 100ERA", 
+    reality=False, radial_background_correction = False, 
+    voxel_number = None, update_freq=None, repeats=1
+    ):
+    
     # initialise opencl context, device, queue and reikna thread
     opencl_stuff = Opencl_init()
     
@@ -91,10 +95,8 @@ def phase(I, S=None, mask=None, iters="100DM 100ERA", reality=False, radial_back
         }
     """).build()
 	
-    # initialise random object
+    # initialise object
     O  = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.complex64)
-    Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
-    cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
 
     if radial_background_correction :
         bak = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.float32)
@@ -111,8 +113,6 @@ def phase(I, S=None, mask=None, iters="100DM 100ERA", reality=False, radial_back
                                       radial_background_correction)
                                       #False)
     
-    data_projection.cfft(O, O, 1)
-
     # initialise DM arrays
     if 'DM' in iters :
         O2   = cl.array.empty_like(O)
@@ -121,44 +121,50 @@ def phase(I, S=None, mask=None, iters="100DM 100ERA", reality=False, radial_back
     # parse iteration sequence
     seq_gen, total = generator_from_iters_string(iters)
     
-    it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
-    iteration = 0
-    for alg in it:
-        if alg == 'ERA':
-            support_projection(O, O, bak, bak)
+    for r in range(repeats):
+        # initialise random object
+        Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
+        cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
+        data_projection.cfft(O, O, 1)
+
+        it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
+        iteration = 0
+        for alg in it:
+            if alg == 'ERA':
+                support_projection(O, O, bak, bak)
+                
+                data_projection(O, bak)
+                
+                opencl_stuff.queue.finish()
+                it.set_description('IPA ERA {:.2e}'.format(data_projection.amp_err))
             
-            data_projection(O, bak)
+            elif alg == 'DM':
+                support_projection(O, O2, bak, bak2)
+                
+                cl_code.DM1(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
+                cl_code.DM1_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
+                
+                data_projection(O2, bak)
+                
+                cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
+                cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
+                 
+                opencl_stuff.queue.finish()
+                it.set_description('IPA DM {:.2e}'.format(data_projection.amp_err))
             
-            opencl_stuff.queue.finish()
-            it.set_description('IPA ERA {:.2e}'.format(data_projection.amp_err))
-        
-        elif alg == 'DM':
-            support_projection(O, O2, bak, bak2)
-            
-            cl_code.DM1(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
-            cl_code.DM1_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
-            
-            data_projection(O2, bak)
-            
-            cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
-            cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
-             
-            opencl_stuff.queue.finish()
-            it.set_description('IPA DM {:.2e}'.format(data_projection.amp_err))
-        
-        # output results 
-        iteration += 1
-        if (update_freq and iteration % update_freq == 0) or iteration == (total-1) :
-            out = {'object': O.get() * np.sqrt(I.size), 
-                   'error': data_projection.amp_err, }
-            
-            if radial_background_correction :
-                 out['radial_background'] = bak.get()
-            
-            if voxel_number :
-                 out['support'] = support_projection.S.get()
-            
-            yield out
+            # output results 
+            iteration += 1
+            if (update_freq and iteration % update_freq == 0) or iteration == total :
+                out = {'object': O.get() * np.sqrt(I.size), 
+                       'error': data_projection.amp_err, }
+                
+                if radial_background_correction :
+                     out['radial_background'] = bak.get()**2
+                
+                if voxel_number :
+                     out['support'] = support_projection.S.get()
+                
+                yield out
    
       
 if __name__ == '__main__':
@@ -176,14 +182,14 @@ if __name__ == '__main__':
         mask = pipe['mask']
     else :
         mask = None
-
-    for out in phase(
+    
+    phasor = phase(
                 I, S=S, iters=' '.join(args.iters), 
-                reality=args.reality, 
+                reality = args.reality, 
                 radial_background_correction = args.radial_background_correction, 
                 voxel_number = args.voxel_number, 
-                callback=pipe, 
-                callback_finished=output,
-                update_freq=args.update_freq):
-        
+                update_freq = args.update_freq,
+                repeats = args.repeats)
+    
+    for out in phasor:        
         pickle.dump(out, args.output)
