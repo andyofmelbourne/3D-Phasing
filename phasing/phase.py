@@ -111,21 +111,21 @@ def phase(
     
     data_projection = Data_projection(opencl_stuff, I, O, mask,  
                                       radial_background_correction)
-                                      #False)
     
     # initialise DM arrays
     if 'DM' in iters :
         O2   = cl.array.empty_like(O)
         bak2 = cl.array.empty_like(bak)
     
-    # parse iteration sequence
-    seq_gen, total = generator_from_iters_string(iters)
-    
     for r in range(repeats):
+        # parse iteration sequence
+        seq_gen, total = generator_from_iters_string(iters)
+        
         # initialise random object
         Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
         cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
         data_projection.cfft(O, O, 1)
+        bak.fill(0.)
 
         it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
         iteration = 0

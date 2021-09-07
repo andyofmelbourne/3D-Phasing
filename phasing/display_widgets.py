@@ -7,7 +7,7 @@ import numpy as np
 class Default_1D(pg.PlotWidget):
     
     def __init__(self, name, data):
-        super(Default_2D, self).__init__(title = name)
+        super(Default_1D, self).__init__(title = name)
         self.show()
 
     def update(self, data):
