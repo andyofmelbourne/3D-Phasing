@@ -19,6 +19,10 @@ import reikna.fft
 import tqdm
 import pickle
 
+import warnings
+warnings.simplefilter("error")
+warnings.simplefilter("ignore", DeprecationWarning)
+
 def step_downhill(x, err, f_calc, d, fd, min_step, maxiters=100):
     for j in range(maxiters):
         alpha   = -np.sign(fd) * 2**j * min_step 
@@ -111,7 +115,8 @@ class Cgls(object):
         #
         x_old = self.x.copy()
         # 
-        t = tqdm.trange(iterations, desc='cgls err:', file=sys.stderr)
+        #t = tqdm.trange(iterations, desc='cgls err:', file=sys.stderr)
+        t = range(iterations)
         for i in t:
             #
             # perform a line search of f along d
@@ -137,7 +142,7 @@ class Cgls(object):
             self.iters = self.iters + 1
             if self.iters > self.imax or (self.errors[-1] < self.e_tol) or np.max(np.abs(x_old - self.x)) < self.x_tol :
                 break
-            t.set_description("cgls err: {:.2e}".format(self.errors[-1]))
+            #t.set_description("cgls err: {:.2e}".format(self.errors[-1]))
             x_old = self.x.copy()
         #
         #
@@ -150,10 +155,11 @@ def make_qs(shape):
         s = [None for j in range(len(shape))]
         s[i] = slice(None)
         qs.append(q[tuple(s)].copy())
-    return qs  
+    return qs
 
 def mkramp(r, q):
-    return np.exp(2J*np.pi* np.sum([r[i]*q[i] for i in range(len(r))]))
+    out = np.exp(2J * np.pi * np.sum(np.array([r[i]*q[i] for i in range(len(r))], dtype=object)))
+    return out
 
 def error(a, b, r, q):
     return np.sum( np.abs(a - b * mkramp(r, q))**2 )
@@ -193,7 +199,7 @@ def cgls_align(Oth, oh):
     return norm * b * mkramp(cgls.x, q)
 
 
-def merge(Oth, O, index):
+def merge(Oth, PRTF, O, index):
     oh = np.fft.fftn(O)
     
     if Oth is not None :
@@ -228,42 +234,63 @@ def merge(Oth, O, index):
         oh = cgls_align(Oth/index, oh)
     
     else :
-        Oth = np.zeros(O.shape, dtype=np.complex128)
+        Oth  = np.zeros(O.shape, dtype=np.complex128)
+        PRTF = np.zeros(O.shape, dtype=np.complex128)
         
         # set the mean phase value to zero
         oh *= np.exp(-1J * np.angle(oh).ravel()[0])
     
     # add to total
-    Oth   = oh
-    index = 1
+    PRTF  += np.exp(1J * np.angle(oh))
+    Oth   += oh
     
-    return Oth, index
+    return Oth, PRTF
+
+def conv_metric(Oth, PRTF, index):
+    return np.sum(np.abs(Oth) * np.abs(PRTF)) / np.sum(np.abs(Oth)) / index
+
+def output(Oth, PRTF, tots, index):
+    out = {}
+    out['convergence_metric'] = conv_metric(Oth, PRTF, index)
+    out['object']             = np.fft.ifftn(Oth/index)
+    out['PRTF']               = np.abs(PRTF)/index
+    for name in tots:
+        out[name]             = tots[name] / index
+    
+    pickle.dump(out, args.output)
+    args.output.flush()
 
 import time
 if __name__ == "__main__":
-    Oth = None
+    Oth   = None 
+    PRTF  = None
     index = 0
+
+    tots = {}
     
     while True :
         try :
+            # must be dict
             package = pickle.load(args.input)
             
             if 'object' in package:
-                Oth, index = merge(Oth, package['object'], index)
+                Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index)
                 
                 if args.update_freq != 0 and index % args.update_freq == 0:
-                    #Om = np.fft.ifftn(amp_tot/index * np.exp(1J * phase_tot/index))
-                    Om = np.fft.ifftn(Oth/index)
-                    pickle.dump({'object_partial': Om}, args.output)
-                    args.output.flush()
-                    #time.sleep(2)
+                    output(Oth, PRTF, tots, index)
             
+            # just average everything else
+            for name in package.keys():
+                if name not in tots :
+                    tots[name] = package[name]
+                else : 
+                    tots[name] += package[name]
+            
+            index += 1
         except EOFError :
-            #Om = np.fft.ifftn(amp_tot/index * np.exp(1J * phase_tot/index))
-            Om = np.fft.ifftn(Oth/index)
             break
         
-        except Exception as e :
-            print(e, file=sys.stderr)
+        #except Exception as e :
+        #    print(e, file=sys.stderr)
     
-    pickle.dump({'object': Om}, args.output)
+    output(Oth, PRTF, tots, index)

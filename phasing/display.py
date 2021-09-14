@@ -8,8 +8,8 @@ parser.add_argument('-p', '--pipe_through', action='store_true', \
                     help="pipe input to output before display")
 parser.add_argument('-a', '--accumulate', action='store_true', \
                     help="Accumulate named data for display (as an image stack)")
-parser.add_argument('-n', '--name', type=str, \
-                    help="Only show datasets with the key 'name'")
+parser.add_argument('-n', '--names', nargs='*', \
+                    help="Only show datasets with keys in the list of names")
 parser.add_argument('-d', '--display_style', type=str, nargs='*',\
                     help="Select the display style for named datasets, e.g. '-d object=1'")
 parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
@@ -17,6 +17,7 @@ parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.s
 parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
                     help="Python pickle output file if 'pipe_through' is True")
 args = parser.parse_args()
+
 
 
 # read data from input pipe 
@@ -62,7 +63,7 @@ class Get_piped_data(QObject):
         for name, value in d.items():
             if isinstance(value, dict):
                 self.recurse_dict(value)
-            elif args.name is None or args.name == name :
+            elif args.names is None or name in args.names:
                 if args.accumulate :
                     if name in self.data :
                         self.data[name] = accumulator(self.data[name], value)
@@ -88,7 +89,7 @@ class Get_piped_data(QObject):
                 if isinstance(package, dict) : 
                     self.recurse_dict(package)
                 
-                elif args.name is None :
+                elif args.names is None :
                     name = 'unamed data'
                     self.data[name] = package
                     self.data_recieved.emit(name)
@@ -149,6 +150,9 @@ class Main():
             # update display data
             # -------------------
             self.plots[name].update(self.worker.data[name])
+        
+        elif isinstance(self.worker.data[name], numbers.Number): 
+            print(name, self.worker.data[name], file=sys.stderr)
     
 if __name__ == '__main__':
     # allow Control-C
