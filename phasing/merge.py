@@ -273,11 +273,7 @@ if __name__ == "__main__":
             # must be dict
             package = pickle.load(args.input)
             
-            if 'object' in package:
-                Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index)
-                
-                if args.update_freq != 0 and index % args.update_freq == 0:
-                    output(Oth, PRTF, tots, index)
+            Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index)
             
             # just average everything else
             for name in package.keys():
@@ -287,6 +283,10 @@ if __name__ == "__main__":
                     tots[name] += package[name]
             
             index += 1
+            
+            if args.update_freq != 0 and index % args.update_freq == 0:
+                output(Oth, PRTF, tots, index)
+        
         except EOFError :
             break
         

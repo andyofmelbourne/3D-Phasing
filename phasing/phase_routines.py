@@ -9,6 +9,35 @@ from reikna.algorithms import Reduce, Predicate, predicate_sum
 from reikna.cluda import Snippet
 from reikna.core import Annotation, Type, Transformation, Parameter
 
+def centre_object(im, S):
+    dims = range(len(im.shape))
+    
+    # convert image to probability density
+    out = S / np.sum(S)
+    
+    # convert xyz coords to phases on the unit circle
+    s = [slice(None),] + [None for i in dims]
+    s = tuple(s)
+    
+    xyz = 2 * np.pi * np.indices(im.shape) / np.array(im.shape)[s]
+    
+    centres = list(dims)
+    for dim in dims:
+        # calculate circular centre of mass
+        mean = np.angle(np.sum(out * np.exp(1J * xyz[dim])))
+        if mean < 0 : 
+            mean += 2*np.pi
+        
+        # map back to data coordinates
+        centres[dim] = np.rint(mean * im.shape[dim] / (2 * np.pi)).astype(int)
+        
+    # roll data 
+    im = np.roll(im, -np.array(centres), axis = tuple(dims))
+    S  = np.roll(S, -np.array(centres), axis = tuple(dims))
+    im = np.fft.fftshift(im)
+    S  = np.fft.fftshift(S)
+    return im, S
+
 class Opencl_init():
     def __init__(self):
         # find an opencl device (preferably a GPU) in one of the available platforms

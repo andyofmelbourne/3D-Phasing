@@ -16,6 +16,8 @@ if __name__ == '__main__':
                         help="Iteration sequence for the algorith")
     parser.add_argument('-u', '--update_freq', type=int, default=0, \
                         help="write intermediate results to output every 'update_freq' iterations")
+    parser.add_argument('-c', '--centre', action='store_false', \
+                        help="Centre the object accourding to the centre-of-mass of the support before output")
     parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                         help="Python pickle file containing a dictionary with keys 'intensity' and 'support'")
     parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
@@ -33,12 +35,14 @@ import phasing.phase_routines
 from phasing.phase_routines import (Opencl_init, 
                                     Support_projection, 
                                     Data_projection,  
-                                    generator_from_iters_string)
+                                    generator_from_iters_string,
+                                    centre_object)
 
 def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
-    voxel_number = None, update_freq=None, repeats=1
+    voxel_number = None, update_freq=None, repeats=1,
+    centre = False,
     ):
     
     # initialise opencl context, device, queue and reikna thread
@@ -127,6 +131,8 @@ def phase(
         data_projection.cfft(O, O, 1)
         bak.fill(0.)
 
+        errs = []
+
         it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
         iteration = 0
         for alg in it:
@@ -136,7 +142,6 @@ def phase(
                 data_projection(O, bak)
                 
                 opencl_stuff.queue.finish()
-                it.set_description('IPA ERA {:.2e}'.format(data_projection.amp_err))
             
             elif alg == 'DM':
                 support_projection(O, O2, bak, bak2)
@@ -150,20 +155,30 @@ def phase(
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
                  
                 opencl_stuff.queue.finish()
-                it.set_description('IPA DM {:.2e}'.format(data_projection.amp_err))
+    
+            it.set_description('IPA {} {:.2e}'.format(alg, data_projection.amp_err))
+            
+            errs.append(data_projection.amp_err)
             
             # output results 
             iteration += 1
             if (update_freq and iteration % update_freq == 0) or iteration == total :
-                out = {'object': O.get() * np.sqrt(I.size), 
-                       'error': data_projection.amp_err, }
+                Oc    = O.get() * np.sqrt(I.size)
+                Sc    = support_projection.S.get()
+                
+                if centre :
+                    Oc, Sc = centre_object(Oc, Sc)
+                
+                out = {'object': Oc, 
+                       'error': np.array(errs), }
                 
                 if radial_background_correction :
                      out['radial_background'] = bak.get()**2
                 
                 if voxel_number :
-                     out['support'] = support_projection.S.get()
+                     out['support'] = Sc
                 
+                errs = []
                 yield out
    
       
@@ -189,7 +204,9 @@ if __name__ == '__main__':
                 radial_background_correction = args.radial_background_correction, 
                 voxel_number = args.voxel_number, 
                 update_freq = args.update_freq,
-                repeats = args.repeats)
+                repeats = args.repeats, 
+                centre = args.centre,
+    )
     
     for out in phasor:        
         pickle.dump(out, args.output)

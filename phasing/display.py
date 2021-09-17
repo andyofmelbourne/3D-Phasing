@@ -31,7 +31,7 @@ import signal
 import numbers
 
 import phasing.display_widgets 
-from phasing.display_widgets import Default_2D, Default_1D, D1
+from phasing.display_widgets import Default_2D, Default_1D, D1, D2
 
 def accumulator_init(value):
     if isinstance(value, np.ndarray) and len(value.shape) == 1:
@@ -79,7 +79,7 @@ class Get_piped_data(QObject):
         while True :
             try :
                 package = pickle.load(args.input)
-
+                
                 if args.pipe_through : 
                     pickle.dump(package, args.output)
                     sys.stdout.flush()
@@ -111,6 +111,8 @@ class Main():
                 name, style = ds.split('=')
                 if style == '1' :
                     style = D1
+                elif style == '2' :
+                    style = D2
                 
                 self.display_styles[name] = style
         else :
@@ -132,7 +134,6 @@ class Main():
         self.thread.start()
         self.plots = {}
         
- 
     def show_data(self, name):
         if isinstance(self.worker.data[name], np.ndarray): 
             # initialise display widgets
@@ -149,7 +150,7 @@ class Main():
                 
             # update display data
             # -------------------
-            self.plots[name].update(self.worker.data[name])
+            self.plots[name].update_data(self.worker.data[name])
         
         elif isinstance(self.worker.data[name], numbers.Number): 
             print(name, self.worker.data[name], file=sys.stderr)
