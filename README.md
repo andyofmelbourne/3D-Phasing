@@ -1,7 +1,7 @@
 # 3D-Phasing
 Basic python code for phasing two and three-dimensional diffraction volumes
 
-![PR772 example](https://raw.githubusercontent.com/andyofmelbourne/3D-phasing/refactor/example/PR772_example.gif)
+![PR772 example](https://github.com/andyofmelbourne/3D-Phasing/blob/4166e7c0a9768368d3b53cf84133ddec1f667c2a/examples/PR772_example.gif)
 
 ## Installation
 To install run:
