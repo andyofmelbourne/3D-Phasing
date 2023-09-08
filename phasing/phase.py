@@ -18,6 +18,8 @@ if __name__ == '__main__':
                         help="write intermediate results to output every 'update_freq' iterations")
     parser.add_argument('-c', '--centre', action='store_false', \
                         help="Centre the object accourding to the centre-of-mass of the support before output")
+    parser.add_argument('--HIO_beta', type=float, default=1., \
+                        help="Feedback parameter for HIO")
     parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                         help="Python pickle file containing a dictionary with keys 'intensity' and 'support'")
     parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
@@ -42,13 +44,13 @@ def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
-    centre = False,
+    centre = False, HIO_beta=1.
     ):
     
     # initialise opencl context, device, queue and reikna thread
     opencl_stuff = Opencl_init()
     
-    # modes += mapper.Pmod(modes_sup * 2 - modes) - modes_sup
+    # DM: modes += Pmod(modes_sup * 2 - modes) - modes_sup
     cl_code = cl.Program(opencl_stuff.context, r"""
         #include <pyopencl-complex.h>
         // O2 = Psup(O)
@@ -97,11 +99,43 @@ def phase(
         
         bak[i] += bak2[i];
         }
+        
+        __kernel void HIO (
+            __global cfloat_t *O, 
+            __global cfloat_t *Om,
+            __global const char *S,
+            float beta
+            )
+        {
+        int i = get_global_id(0);
+        
+        O[i].x = S[i] * Om[i].x;
+        O[i].y = S[i] * Om[i].y;
+        
+        O[i].x -= beta * (1-S[i]) * Om[i].x;
+        O[i].y -= beta * (1-S[i]) * Om[i].y;
+
+        // copy O to Om 
+        Om[i].x = O[i].x;
+        Om[i].y = O[i].y;
+        }
+        
+        __kernel void copyO (
+            __global const cfloat_t *O, 
+            __global cfloat_t *O2
+            )
+        {
+        int i = get_global_id(0);
+        
+        O2[i].x = O[i].x;
+        O2[i].y = O[i].y;
+        }
     """).build()
 	
     # initialise object
     O  = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.complex64)
 
+    # initialise background (even if not used)
     if radial_background_correction :
         bak = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.float32)
         bak.fill(0.)
@@ -117,8 +151,10 @@ def phase(
                                       radial_background_correction)
     
     # initialise DM arrays
-    if 'DM' in iters :
+    if ('DM' in iters) or ('HIO' in iters) :
         O2   = cl.array.empty_like(O)
+    
+    if ('DM' in iters) :
         bak2 = cl.array.empty_like(bak)
     
     for r in range(repeats):
@@ -131,8 +167,13 @@ def phase(
         data_projection.cfft(O, O, 1)
         bak.fill(0.)
 
+        # initialise O2 for HIO
+        if 'HIO' in iters :
+            cl_code.copyO(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
+            data_projection(O2, bak)
+        
         errs = []
-
+        
         it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
         iteration = 0
         for alg in it:
@@ -141,8 +182,15 @@ def phase(
                 
                 data_projection(O, bak)
                 
-                opencl_stuff.queue.finish()
-            
+            elif alg == 'HIO':
+                support_projection(O, O2, bak, bak, update_Oout=False)
+                
+                cl_code.HIO(opencl_stuff.queue, (O.size,), None, 
+                            O.data, O2.data, support_projection.S.data, 
+                            np.float32(0.1))
+                
+                data_projection(O2, bak)
+                
             elif alg == 'DM':
                 support_projection(O, O2, bak, bak2)
                 
@@ -150,12 +198,12 @@ def phase(
                 cl_code.DM1_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
                 
                 data_projection(O2, bak)
-                
+
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
                  
-                opencl_stuff.queue.finish()
-    
+            opencl_stuff.queue.finish()
+             
             it.set_description('IPA {} {:.2e}'.format(alg, data_projection.amp_err))
             
             errs.append(data_projection.amp_err)
@@ -206,6 +254,7 @@ if __name__ == '__main__':
                 update_freq = args.update_freq,
                 repeats = args.repeats, 
                 centre = args.centre,
+                HIO_beta = args.HIO_beta,
     )
     
     for out in phasor:        

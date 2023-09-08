@@ -61,7 +61,7 @@ class Opencl_init():
         
     
 class Support_projection():
-    def __init__(self, opencl_stuff, shape, S, voxel_number, reality, radial_background_correction):
+    def __init__(self, opencl_stuff, shape, S, voxel_number, threshold, reality, radial_background_correction):
         self.queue = opencl_stuff.queue
         
         self.cl_code = cl.Program(opencl_stuff.context, r"""        
@@ -89,6 +89,23 @@ class Support_projection():
         Oout[i].x = Oin[i].x * S[i];
         Oout[i].y = 0.;
         }
+
+        __kernel void threshold_support (
+            __global const cfloat_t *Oin, 
+            __global char *S,
+            float threshold
+            )
+        {
+        int i = get_global_id(0);
+        
+        float t = Oin[i].x * Oin[i].x + Oin[i].y * Oin[i].y;
+        //printf("%f %f\n", t, threshold);
+        if (t > threshold) {
+            S[i] = 1;
+        } else {
+            S[i] = 0;
+        }
+        }
         """).build()
         
         if S is not None :
@@ -98,8 +115,6 @@ class Support_projection():
         
         if voxel_number :
             self.voxsup = VoxSup(opencl_stuff, shape, voxel_number)
-        else:
-            self.voxsup = lambda x, y, tol=None: None
         
         if radial_background_correction :
             self.radav = Radial_average(opencl_stuff, shape)
@@ -108,12 +123,31 @@ class Support_projection():
             self.support_proj = self.cl_code.support_real
         else :
             self.support_proj = self.cl_code.support
+
+        if threshold :
+            self.threshold_support = self.cl_code.threshold_support
+            self.threshold_support.set_scalar_arg_dtypes([None, None, np.float32])
+            # for fft factor
+            self.threshold = threshold / np.prod(shape)**0.5
+        else :
+            self.threshold = threshold 
         
+        self.voxel_number = voxel_number
         self.radial_background_correction = radial_background_correction 
         
-    def __call__(self, Oin, Oout, bakin, bakout):
-        self.voxsup(Oin, self.S, tol=1)
-        self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)
+    def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True):
+        if self.voxel_number:
+            self.voxsup(Oin, self.S, tol=1)
+        
+        if self.threshold :
+            import sys
+            print(self.threshold, file=sys.stderr)
+            self.threshold_support(self.queue, (Oin.size,), None, Oin.data, self.S.data, self.threshold)
+            print(np.sum(self.S.get()), file=sys.stderr)
+            print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
+        
+        if update_Oout :
+            self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)
         
         if self.radial_background_correction :
             self.radav(bakin)
@@ -211,7 +245,6 @@ class Data_projection():
         self.radial_background_correction = radial_background_correction
         
         # compile reikna fft class
-        # class o: dtype, shape = np.complex64, I.shape
         self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
 
         # sum routine for data error calc
@@ -471,7 +504,7 @@ class Radial_average():
             y    = np.fft.fftfreq(shape[1], 1/shape[1])[None, :, None]
             z    = np.fft.fftfreq(shape[2], 1/shape[2])[None, None, :]
             r    = np.rint(np.sqrt(x**2 + y**2 + z**2)).astype(np.uint32)
-
+        
         r  = np.ascontiguousarray(r)
         
         # make a unique counter for pixels with the same r value

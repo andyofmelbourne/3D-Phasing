@@ -1,5 +1,5 @@
 
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QSlider
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QSlider, QApplication
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, Qt, QSize
 import pyqtgraph as pg 
 import numpy as np
@@ -24,6 +24,8 @@ class Default_1D(pg.PlotWidget):
             dtype = np.uint8
         
         self.plot(data.real.astype(dtype))
+        
+        QApplication.processEvents()
 
 class Default_2D(pg.ImageView):
     
