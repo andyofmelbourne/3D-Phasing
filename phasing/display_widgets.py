@@ -62,10 +62,31 @@ class D1(Default_2D):
         super().__init__(name, data)
         
     def update_data(self, data):
-        super().update(self.project(data))
+        super().update_data(self.project(data))
         
     def project(self, data):
-        return np.vstack([np.sum(data, axis=a) for a in range(len(data.shape))])
+        return np.hstack([np.sum(data, axis=a) for a in range(len(data.shape))])
+
+class D3(Default_2D):
+    """
+    Slice 3D images to display as 2D
+    """
+    
+    def __init__(self, name, data):
+        super().__init__(name, data)
+        
+    def update_data(self, data):
+        super().update_data(self.project(data))
+        
+    def project(self, data):
+        dims = range(len(data.shape))
+        s = []
+        for a in dims:
+            t = [slice(None) for i in dims]
+            t[a] = data.shape[a]//2
+            s.append(t)
+            
+        return np.hstack([data[tuple(t)] for t in s])
     
 
 import pyqtgraph.opengl as gl
@@ -82,9 +103,9 @@ class D2(QWidget):
         
         self.sl = QSlider(Qt.Horizontal)
         self.sl.setMinimum(1)
-        self.sl.setMaximum(99)
+        self.sl.setMaximum(9999)
         self.sl.setSingleStep(1)
-        self.sl.setValue(20)
+        self.sl.setValue(2000)
         layout.addWidget(self.sl)
         self.sl.valueChanged.connect(self.lvlchange)
         
@@ -93,7 +114,7 @@ class D2(QWidget):
         self.show()
         
     def lvlchange(self):
-        self.iso.lvl = self.sl.value()/100.
+        self.iso.lvl = self.sl.value()/10000.
         self.iso.update_data()
 
     def update_data(self, data):

@@ -140,11 +140,11 @@ class Support_projection():
             self.voxsup(Oin, self.S, tol=1)
         
         if self.threshold :
-            import sys
-            print(self.threshold, file=sys.stderr)
+            #import sys
+            #print(self.threshold, file=sys.stderr)
             self.threshold_support(self.queue, (Oin.size,), None, Oin.data, self.S.data, self.threshold)
-            print(np.sum(self.S.get()), file=sys.stderr)
-            print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
+            #print(np.sum(self.S.get()), file=sys.stderr)
+            #print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
         
         if update_Oout :
             self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)

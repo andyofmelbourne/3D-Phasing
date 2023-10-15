@@ -12,6 +12,8 @@ if __name__ == '__main__':
                         help="Include radial background correction")
     parser.add_argument('-v', '--voxel_number', type=int, \
                         help="Use the voxel number support projection with given number of voxels")
+    parser.add_argument('-t', '--threshold', type=float, \
+                        help="use a threshold support projection")
     parser.add_argument('--iters', default=["100DM", "100ERA"], nargs='*', \
                         help="Iteration sequence for the algorith")
     parser.add_argument('-u', '--update_freq', type=int, default=0, \
@@ -44,7 +46,7 @@ def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
-    centre = False, HIO_beta=1.
+    centre = False, HIO_beta=1., threshold=None
     ):
     
     # initialise opencl context, device, queue and reikna thread
@@ -144,7 +146,7 @@ def phase(
     
     # initialise projections
     support_projection = Support_projection(opencl_stuff, I.shape, 
-                                            S, voxel_number, reality,      
+                                            S, voxel_number, threshold, reality,      
                                             radial_background_correction)
     
     data_projection = Data_projection(opencl_stuff, I, O, mask,  
@@ -255,6 +257,7 @@ if __name__ == '__main__':
                 repeats = args.repeats, 
                 centre = args.centre,
                 HIO_beta = args.HIO_beta,
+                threshold = args.threshold,
     )
     
     for out in phasor:        

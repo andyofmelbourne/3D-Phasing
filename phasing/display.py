@@ -31,7 +31,7 @@ import signal
 import numbers
 
 import phasing.display_widgets 
-from phasing.display_widgets import Default_2D, Default_1D, D1, D2
+from phasing.display_widgets import Default_2D, Default_1D, D1, D2, D3
 
 def accumulator_init(value):
     if isinstance(value, np.ndarray) and len(value.shape) == 1:
@@ -113,10 +113,13 @@ class Main():
                     style = D1
                 elif style == '2' :
                     style = D2
+                elif style == '3' :
+                    style = D3
                 
                 self.display_styles[name] = style
         else :
             self.display_styles = None
+
         
         # Step 2: Create a QThread object
         self.thread = QThread()

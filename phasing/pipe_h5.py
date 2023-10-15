@@ -29,7 +29,7 @@ else :
 def pipe_to_stdout(name, object):
     if isinstance(object, h5py.Dataset):
         print('sending data:', name, file=sys.stderr)
-
+        
         if args.stream :
             for i in tqdm.tqdm(range(object.shape[0]), desc='streaming data'):
                 pickle.dump({name: object[i]}, sys.stdout.buffer)
