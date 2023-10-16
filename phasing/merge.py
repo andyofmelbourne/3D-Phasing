@@ -142,7 +142,7 @@ class Cgls(object):
             self.iters = self.iters + 1
             if self.iters > self.imax or (self.errors[-1] < self.e_tol) or np.max(np.abs(x_old - self.x)) < self.x_tol :
                 break
-            #t.set_description("cgls err: {:.2e}".format(self.errors[-1]))
+            t.set_description("cgls err: {:.2e}".format(self.errors[-1]))
             x_old = self.x.copy()
         #
         #
