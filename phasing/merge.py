@@ -115,8 +115,8 @@ class Cgls(object):
         #
         x_old = self.x.copy()
         # 
-        #t = tqdm.trange(iterations, desc='cgls err:', file=sys.stderr)
-        t = range(iterations)
+        t = tqdm.trange(iterations, desc='cgls err:', file=sys.stderr)
+        #t = range(iterations)
         for i in t:
             #
             # perform a line search of f along d
