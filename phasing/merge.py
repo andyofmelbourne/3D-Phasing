@@ -3,6 +3,8 @@ import sys
 
 description = "Phase a far-field diffraction volume using iterative projection algorithms."
 parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('-n', '--no_align', action="store_true",  \
+                    help="do not allign object before average")
 parser.add_argument('-s', '--apply_support', action="store_true",  \
                     help="apply support before allignment")
 parser.add_argument('-u', '--update_freq', type=int, default=0,  \
@@ -201,10 +203,10 @@ def cgls_align(Oth, oh):
     return norm * b * mkramp(cgls.x, q)
 
 
-def merge(Oth, PRTF, O, index):
+def merge(Oth, PRTF, O, index, no_align=False):
     oh = np.fft.fftn(O)
     
-    if Oth is not None :
+    if Oth is not None and not no_align:
         # use convolution to get approximate allignment
         # also check for inversion
         C     = np.abs(np.fft.ifftn(oh * Oth.conj()))
@@ -235,10 +237,14 @@ def merge(Oth, PRTF, O, index):
         # now refine with cgls
         oh = cgls_align(Oth/index, oh)
     
-    else :
+    elif Oth is None :
         Oth  = np.zeros(O.shape, dtype=np.complex128)
         PRTF = np.zeros(O.shape, dtype=np.complex128)
         
+        # set the mean phase value to zero
+        oh *= np.exp(-1J * np.angle(oh).ravel()[0])
+    
+    else :
         # set the mean phase value to zero
         oh *= np.exp(-1J * np.angle(oh).ravel()[0])
     
@@ -279,7 +285,7 @@ if __name__ == "__main__":
                 if 'support' in package :
                     package['object'] *= package['support']
             
-            Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index)
+            Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index, args.no_align)
             
             # just average everything else
             for name in package.keys():
