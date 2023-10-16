@@ -8,6 +8,8 @@ if __name__ == '__main__':
                         help="repeat the iteration sequence this many times")
     parser.add_argument('-r', '--reality', action='store_true', \
                         help="Enforce reality of the object at each iteration")
+    parser.add_argument('-s', '--psup_out', action='store_true', \
+                        help="apply support projection before output")
     parser.add_argument('-b', '--radial_background_correction', action='store_true', \
                         help="Include radial background correction")
     parser.add_argument('-v', '--voxel_number', type=int, \
@@ -46,7 +48,7 @@ def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
-    centre = False, HIO_beta=1., threshold=None
+    centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False
     ):
     
     # initialise opencl context, device, queue and reikna thread
@@ -213,6 +215,9 @@ def phase(
             # output results 
             iteration += 1
             if (update_freq and iteration % update_freq == 0) or iteration == total :
+                if apply_support_before_output :
+                    support_projection(O, O, bak, bak)
+                    
                 Oc    = O.get() * np.sqrt(I.size)
                 Sc    = support_projection.S.get()
                 
@@ -258,6 +263,7 @@ if __name__ == '__main__':
                 centre = args.centre,
                 HIO_beta = args.HIO_beta,
                 threshold = args.threshold,
+                apply_support_before_output = args.psup_out,
     )
     
     for out in phasor:        
