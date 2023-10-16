@@ -3,6 +3,8 @@ import sys
 
 description = "Phase a far-field diffraction volume using iterative projection algorithms."
 parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('-s', '--apply_support', action="store_true",  \
+                    help="apply support before allignment")
 parser.add_argument('-u', '--update_freq', type=int, default=0,  \
                     help="write intermediate results to output every 'update_freq' iterations")
 parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
@@ -272,6 +274,10 @@ if __name__ == "__main__":
         try :
             # must be dict
             package = pickle.load(args.input)
+            
+            if args.apply_support :
+                if 'support' in package :
+                    package['object'] *= package['support']
             
             Oth, PRTF = merge(Oth, PRTF, package.pop('object'), index)
             
