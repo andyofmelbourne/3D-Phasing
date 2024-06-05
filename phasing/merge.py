@@ -200,7 +200,7 @@ def cgls_align(Oth, oh):
     cgls = Cgls(x0, lambda x: error(a, b, x, q), lambda x: grad(a, b, x, q), lambda x, d: grad_dot(d, a, b, x, q), lambda x, d: dHd(d, a, b, x, q))
     cgls.cgls(100)
         
-    return norm * b * mkramp(cgls.x, q)
+    return norm * b * mkramp(cgls.x, q), cgls.x
 
 
 def merge(Oth, PRTF, O, index, no_align=False):
@@ -217,9 +217,11 @@ def merge(Oth, PRTF, O, index, no_align=False):
         dx_inv= np.unravel_index(np.argmax(C), C.shape)
         C_max_inv = C[dx_inv]
         
+        is_inverted = 'not'
         if C_max_inv > C_max :
             dx = dx_inv
             oh = oh.conj()
+            is_inverted = ''
         
         # calculate phase ramp for any number of dimensions
         xdq = np.zeros(C.shape, dtype=float)
@@ -235,7 +237,10 @@ def merge(Oth, PRTF, O, index, no_align=False):
         oh *= np.exp(-1J * np.angle(oh).ravel()[0])
         
         # now refine with cgls
-        oh = cgls_align(Oth/index, oh)
+        oh, x = cgls_align(Oth/index, oh)
+        
+        #print('shift from cgls:', dx, ' object is', is_inverted, 'inverted', file=sys.stderr)
+        print('shift from cgls:', dx + x, ' object is', is_inverted, 'inverted', 'corr:', C_max, file=sys.stderr)
     
     elif Oth is None :
         Oth  = np.zeros(O.shape, dtype=np.complex128)

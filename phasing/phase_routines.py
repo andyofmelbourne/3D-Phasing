@@ -4,6 +4,7 @@ import reikna.cluda as cluda
 import reikna.fft
 import numpy as np
 import re
+import sys
 
 from reikna.algorithms import Reduce, Predicate, predicate_sum
 from reikna.cluda import Snippet
@@ -59,6 +60,20 @@ class Opencl_init():
         self.api = cluda.ocl_api()
         self.thr = self.api.Thread(self.queue)
         
+
+def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
+    """
+    smooth object, threshold
+    """
+    p0 = np.sum(S)
+    from scipy.ndimage import gaussian_filter
+    t = gaussian_filter(np.abs(O), sig, mode = 'wrap')
+    threshold = thresh * np.median(t[S > 0])
+    S[:] = t > threshold
+    p1 = np.sum(S)
+    print(f'\n{iteration} applying shrinkwrap {p0} -> {p1} pixels in mask, with a loss of {p0-p1} pixels\n', file=sys.stderr)
+    
+    
     
 class Support_projection():
     def __init__(self, opencl_stuff, shape, S, voxel_number, threshold, reality, radial_background_correction):
@@ -109,8 +124,10 @@ class Support_projection():
         """).build()
         
         if S is not None :
-            self.S = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
+            self.S  = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
+            self.S0 = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
         else :
+            self.S0 = None
             self.S = cl.array.empty(self.queue, shape, dtype=np.int8)
         
         if voxel_number :
@@ -137,6 +154,8 @@ class Support_projection():
         
     def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True):
         if self.voxel_number:
+            if self.S0 is not None :
+                Oin = Oin * self.S0
             self.voxsup(Oin, self.S, tol=1)
         
         if self.threshold :
@@ -224,10 +243,12 @@ class Data_projection():
         
         """).build()
 
-        if mask :
+        if mask is not None :
             self.mask = cl.array.to_device(opencl_stuff.queue,  
                                           np.ascontiguousarray(mask, dtype=np.int8))
+            print(f'loading mask for data projection, with {np.sum(mask==0)} floating values', file=sys.stderr)
         else :
+            print(f'no mask for data projection', file=sys.stderr)
             self.mask = cl.array.to_device(opencl_stuff.queue,  
                                           np.ascontiguousarray(np.ones(I.shape, dtype=np.int8)))
         

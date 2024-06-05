@@ -37,12 +37,14 @@ import pyopencl.array
 import tqdm
 import pickle
 
+
 import phasing.phase_routines
 from phasing.phase_routines import (Opencl_init, 
                                     Support_projection, 
                                     Data_projection,  
                                     generator_from_iters_string,
-                                    centre_object)
+                                    centre_object, 
+                                    shrinkwrap)
 
 def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
@@ -180,8 +182,11 @@ def phase(
         
         it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
         iteration = 0
+        ERA_iterations = 0 
         for alg in it:
             if alg == 'ERA':
+                ERA_iterations += 1
+                
                 support_projection(O, O, bak, bak)
                 
                 data_projection(O, bak)
@@ -205,6 +210,14 @@ def phase(
 
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
+            
+            if alg == 'ERA' and ERA_iterations % 50 == 0 :
+                #print(f'\nshrinkwrap iteration = {iteration} shrinkwrap_index {shrinkwrap_index}\n', file=sys.stderr)
+                St = support_projection.S.get()
+                
+                shrinkwrap(O.get(), St, iteration = iteration)
+                
+                support_projection.S.set(St) 
                  
             opencl_stuff.queue.finish()
              
@@ -230,8 +243,9 @@ def phase(
                 if radial_background_correction :
                      out['radial_background'] = bak.get()**2
                 
-                if voxel_number :
-                     out['support'] = Sc
+                #if voxel_number :
+                #     out['support'] = Sc
+                out['support'] = Sc
                 
                 errs = []
                 yield out
@@ -249,12 +263,14 @@ if __name__ == '__main__':
         S = None
     
     if 'mask' in pipe :
+        print('loading intensity mask from input', file=sys.stderr)
         mask = pipe['mask']
     else :
+        print('no intensity mask detected', file=sys.stderr)
         mask = None
     
     phasor = phase(
-                I, S=S, iters=' '.join(args.iters), 
+                I, S=S, mask = mask, iters=' '.join(args.iters), 
                 reality = args.reality, 
                 radial_background_correction = args.radial_background_correction, 
                 voxel_number = args.voxel_number, 

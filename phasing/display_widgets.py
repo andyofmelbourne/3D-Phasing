@@ -36,7 +36,7 @@ class Default_2D(pg.ImageView):
         self.ui.roiBtn.hide()
         self.show()
 
-    def update_data(self, data):
+    def update_data(self, data, init = False):
         # convert bool to uint8 for display
         if data.dtype == bool : 
             t = data.astype(np.uint8)
@@ -48,7 +48,10 @@ class Default_2D(pg.ImageView):
         else :
             t = data
         
+        # time time-index (first axis) if 3D
+        z = self.timeIndex(self.timeLine)[0]
         self.setImage(t, autoRange = False, autoLevels = False, autoHistogramRange = False)
+        self.setCurrentIndex(z)
 
 Default_3D = Default_2D
 
