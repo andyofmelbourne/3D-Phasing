@@ -150,6 +150,8 @@ class Main():
                     self.plots[name] = Default_2D(name, self.worker.data[name])
                 elif dim == 1:
                     self.plots[name] = Default_1D(name, self.worker.data[name])
+                else :
+                    print('unsuported dimension:', dim)
                 
             # update display data
             # -------------------
