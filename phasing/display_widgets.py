@@ -51,7 +51,8 @@ class Default_2D(pg.ImageView):
         # time time-index (first axis) if 3D
         z = self.timeIndex(self.timeLine)[0]
         self.setImage(t, autoRange = False, autoLevels = False, autoHistogramRange = False)
-        self.setCurrentIndex(z)
+        if z != 0 :
+            self.setCurrentIndex(z)
 
 Default_3D = Default_2D
 
