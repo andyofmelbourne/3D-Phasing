@@ -26,6 +26,8 @@ if __name__ == '__main__':
                         help="Feedback parameter for HIO")
     parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                         help="Python pickle file containing a dictionary with keys 'intensity' and 'support'")
+    parser.add_argument('--shrink', nargs=3, type=float, \
+                        help="Shrinkwrap parameters to apply during ERA iterations. arguement is sig threshold update_period. e.g. --shrink 2 0.5 50")
     parser.add_argument('-o', '--output', type=argparse.FileType('wb'), default=sys.stdout.buffer, \
                         help="Python pickle output file. The result is written as a dictionary with the key 'object'")
     args = parser.parse_args()
@@ -50,7 +52,8 @@ def phase(
     I, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
-    centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False
+    centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False,
+    shrink_sig = None, shrink_thresh = None, shrink_update = None
     ):
     
     # initialise opencl context, device, queue and reikna thread
@@ -211,11 +214,11 @@ def phase(
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
             
-            if alg == 'ERA' and ERA_iterations % 50 == 0 :
+            if shrink_sig is not None and alg == 'ERA' and ERA_iterations % shrink_update == 0 :
                 #print(f'\nshrinkwrap iteration = {iteration} shrinkwrap_index {shrinkwrap_index}\n', file=sys.stderr)
                 St = support_projection.S.get()
                 
-                shrinkwrap(O.get(), St, iteration = iteration)
+                shrinkwrap(O.get(), St, sig = shrink_sig, thresh = shrink_thresh, iteration = iteration)
                 
                 support_projection.S.set(St) 
                  
@@ -268,6 +271,12 @@ if __name__ == '__main__':
     else :
         print('no intensity mask detected', file=sys.stderr)
         mask = None
+
+    if args.shrink is not None :
+        sig, thresh, period = args.shrink
+    else :
+        sig, thresh, period = [None, None, None]
+        
     
     phasor = phase(
                 I, S=S, mask = mask, iters=' '.join(args.iters), 
@@ -280,6 +289,9 @@ if __name__ == '__main__':
                 HIO_beta = args.HIO_beta,
                 threshold = args.threshold,
                 apply_support_before_output = args.psup_out,
+                shrink_sig = sig, 
+                shrink_thresh = thresh, 
+                shrink_update = period
     )
     
     for out in phasor:        
