@@ -61,17 +61,39 @@ class Opencl_init():
         self.thr = self.api.Thread(self.queue)
         
 
+
+
 def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
     """
     smooth object, threshold
     """
-    p0 = np.sum(S)
     from scipy.ndimage import gaussian_filter
+    from scipy.ndimage import label
+    from scipy.ndimage import binary_fill_holes
+
+    p0 = np.sum(S)
+        
     t = gaussian_filter(np.abs(O), sig, mode = 'wrap')
     threshold = thresh * np.median(t[S > 0])
     S[:] = t > threshold
+    
+    # choose 1 connected volume with most "mass"
+    t *= S
+    t  = np.fft.fftshift(t)
+    labels, num = label(t)
+    mass = [np.sum(t[labels == i]) for i in range(1, num + 1)]
+    i = np.argmax(mass)+1
+    S[:] = labels == i
+    print(f'\n{iteration} found {num} connected regions with a mass of {mass}, choosing label = {i}', file = sys.stderr)
+    
+    # fill holes (don't always want this, should add as option)
+    binary_fill_holes(S, output=S)
+
+    # shifting and un-shifting is so that we do not split labels across boundary
+    S[:] = np.fft.ifftshift(S)
+    
     p1 = np.sum(S)
-    print(f'\n{iteration} applying shrinkwrap {p0} -> {p1} pixels in mask, with a loss of {p0-p1} pixels\n', file=sys.stderr)
+    print(f'\n{iteration} applying shrinkwrap {p0} -> {p1} pixels in mask, with a loss of {p0-p1} pixels, found {num} connected region/s\n', file=sys.stderr)
     
     
     
@@ -173,9 +195,44 @@ class Support_projection():
             self.radav.broadcast(bakout)
 
 class Data_projection():
-    def __init__(self, opencl_stuff, I, o, mask, radial_background_correction):
+    def __init__(self, opencl_stuff, I, o, mask, radial_background_correction, real=False):
         self.cl_code = cl.Program(opencl_stuff.context, r"""        
         #include <pyopencl-complex.h>
+
+        __kernel void Pmod_real (
+            __global cfloat_t *O, 
+            __global const float *amp,
+            __global const char *mask
+            )
+        {
+        int i = get_global_id(0);
+        
+        if (mask[i] == 1){
+        float angle = atan2((float)0.0, O[i].x);
+        
+        O[i].x = amp[i] * cos(angle);
+        O[i].y = 0.0;
+        }
+        }
+        
+        __kernel void Pmod_bak_real (
+            __global cfloat_t *O, 
+            __global float    *bak, 
+            __global const float *amp,
+            __global const char *mask
+            )
+        {
+        int i = get_global_id(0);
+        
+        if (mask[i] == 1){
+        float phi = atan2(fabs(O[i].x), bak[i]);
+        float theta = atan2((float)0., O[i].x);
+        
+        O[i].x = amp[i] * cos(theta) * sin(phi);
+        O[i].y = 0.;
+        bak[i] = amp[i] * cos(phi);
+        }
+        }
         
         __kernel void Pmod (
             __global cfloat_t *O, 
@@ -223,6 +280,8 @@ class Data_projection():
         
         if (mask[i] == 1){
             diff[i] = pown( amp[i] - sqrt(O[i].x*O[i].x + O[i].y*O[i].y), 2);
+        } else {
+            diff[i] = 0.;
         }
         }
 
@@ -238,6 +297,8 @@ class Data_projection():
         
         if (mask[i] == 1){
             diff[i] = pown( amp[i] - sqrt(O[i].x*O[i].x + O[i].y*O[i].y + bak[i]*bak[i]), 2);
+        } else {
+            diff[i] = 0.;
         }
         }
         
@@ -252,10 +313,16 @@ class Data_projection():
             self.mask = cl.array.to_device(opencl_stuff.queue,  
                                           np.ascontiguousarray(np.ones(I.shape, dtype=np.int8)))
         
-        if radial_background_correction :
-            self.Pmod = self.Pmod_bak
+        if real :
+            if radial_background_correction :
+                self.Pmod = self.Pmod_bak_real
+            else :
+                self.Pmod = self.Pmod_nobak_real
         else :
-            self.Pmod = self.Pmod_nobak
+            if radial_background_correction :
+                self.Pmod = self.Pmod_bak
+            else :
+                self.Pmod = self.Pmod_nobak
         
         self.amp = cl.array.to_device(opencl_stuff.queue,  
                                       np.ascontiguousarray(np.sqrt(I), dtype=np.float32))
@@ -267,7 +334,7 @@ class Data_projection():
         
         # compile reikna fft class
         self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
-
+        
         # sum routine for data error calc
         self.rsum = Reikna_sum(opencl_stuff.thr,  self.amp)
         
@@ -298,6 +365,25 @@ class Data_projection():
                                  self.mask.data, self.diff.data)
         #
         self.cl_code.Pmod_bak(self.queue, (O.size,), None, 
+                            O.data, bak.data, 
+                            self.amp.data, self.mask.data)
+
+    def Pmod_nobak_real(self, O, bak=None):
+        self.cl_code.amp_err(self.queue, (O.size,), None, 
+                             O.data, self.amp.data, 
+                             self.mask.data, self.diff.data)
+        #
+        self.cl_code.Pmod_real(self.queue, (O.size,), None, 
+                        O.data, self.amp.data, 
+                        self.mask.data)
+        
+
+    def Pmod_bak_real(self, O, bak):
+        self.cl_code.amp_err_bak(self.queue, (O.size,), None, 
+                                 O.data, bak.data, self.amp.data, 
+                                 self.mask.data, self.diff.data)
+        #
+        self.cl_code.Pmod_bak_real(self.queue, (O.size,), None, 
                             O.data, bak.data, 
                             self.amp.data, self.mask.data)
 

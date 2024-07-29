@@ -20,8 +20,11 @@ if __name__ == '__main__':
                         help="Iteration sequence for the algorith")
     parser.add_argument('-u', '--update_freq', type=int, default=0, \
                         help="write intermediate results to output every 'update_freq' iterations")
-    parser.add_argument('-c', '--centre', action='store_false', \
+    parser.add_argument('--inversion_symmetry', default=False, action='store_true', \
+                        help="enforce inversion symmetry (real Fourier values) at each iteration")
+    parser.add_argument('-c', '--centre', default=True, action='store_true', \
                         help="Centre the object accourding to the centre-of-mass of the support before output")
+    parser.add_argument('--no-centre', dest='centre', action='store_false')
     parser.add_argument('--HIO_beta', type=float, default=1., \
                         help="Feedback parameter for HIO")
     parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
@@ -53,7 +56,8 @@ def phase(
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
     centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False,
-    shrink_sig = None, shrink_thresh = None, shrink_update = None
+    shrink_sig = None, shrink_thresh = None, shrink_update = None,
+    inversion_symmetry = False
     ):
     
     # initialise opencl context, device, queue and reikna thread
@@ -157,7 +161,8 @@ def phase(
                                             radial_background_correction)
     
     data_projection = Data_projection(opencl_stuff, I, O, mask,  
-                                      radial_background_correction)
+                                      radial_background_correction,
+                                      real = inversion_symmetry)
     
     # initialise DM arrays
     if ('DM' in iters) or ('HIO' in iters) :
@@ -175,7 +180,7 @@ def phase(
         cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
         data_projection.cfft(O, O, 1)
         bak.fill(0.)
-
+        
         # initialise O2 for HIO
         if 'HIO' in iters :
             cl_code.copyO(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
@@ -274,9 +279,15 @@ if __name__ == '__main__':
 
     if args.shrink is not None :
         sig, thresh, period = args.shrink
+
     else :
         sig, thresh, period = [None, None, None]
         
+    if args.inversion_symmetry :
+        # be sure to centre the support since we have lost translational inveriance
+        if S is not None :
+            S, _ = centre_object(S, S)
+            S = np.fft.ifftshift(S)
     
     phasor = phase(
                 I, S=S, mask = mask, iters=' '.join(args.iters), 
@@ -291,7 +302,8 @@ if __name__ == '__main__':
                 apply_support_before_output = args.psup_out,
                 shrink_sig = sig, 
                 shrink_thresh = thresh, 
-                shrink_update = period
+                shrink_update = period, 
+                inversion_symmetry = args.inversion_symmetry
     )
     
     for out in phasor:        
