@@ -257,7 +257,7 @@ def phase(
                 
                 #if voxel_number :
                 #     out['support'] = Sc
-                out['support'] = Sc
+                out['support'] = Sc.astype(bool)
                 
                 errs = []
                 yield out
