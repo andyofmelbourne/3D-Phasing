@@ -72,6 +72,7 @@ class Get_piped_data(QObject):
                 else :
                     self.data[name] = value
                 
+                print(f'sending {name} for display')
                 self.data_recieved.emit(name)
     
     def run(self):
@@ -79,6 +80,7 @@ class Get_piped_data(QObject):
         while True :
             try :
                 package = pickle.load(args.input)
+                print('loaded package')
                 
                 if args.pipe_through : 
                     pickle.dump(package, args.output)
@@ -87,9 +89,11 @@ class Get_piped_data(QObject):
                 # if data is a dictionary then recursively 
                 # iterate over key, value pairs
                 if isinstance(package, dict) : 
+                    print('recursing through package dictionary')
                     self.recurse_dict(package)
                 
                 elif args.names is None :
+                    print('recieved unamed data')
                     name = 'unamed data'
                     self.data[name] = package
                     self.data_recieved.emit(name)
@@ -129,9 +133,10 @@ class Main():
         self.worker.moveToThread(self.thread)
         # Step 5: Connect signals and slots
         self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
+        #self.worker.finished.connect(self.thread.quit)
+        #self.worker.finished.connect(self.thread.deleteLater)
+        #self.worker.finished.connect(self.worker.deleteLater)
+        #self.thread.finished.connect(self.thread.deleteLater)
         self.worker.data_recieved.connect(self.show_data)
         # Step 6: Start the thread
         self.thread.start()
