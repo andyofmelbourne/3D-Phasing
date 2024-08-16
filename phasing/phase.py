@@ -52,7 +52,7 @@ from phasing.phase_routines import (Opencl_init,
                                     shrinkwrap)
 
 def phase(
-    I, S=None, mask=None, iters="100DM 100ERA", 
+    I, O_in=None, S=None, mask=None, iters="100DM 100ERA", 
     reality=False, radial_background_correction = False, 
     voxel_number = None, update_freq=None, repeats=1,
     centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False,
@@ -148,6 +148,9 @@ def phase(
     # initialise object
     O  = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.complex64)
 
+    if O_in is not None :
+        cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(O_in.astype(np.complex64)))
+
     # initialise background (even if not used)
     if radial_background_correction :
         bak = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.float32)
@@ -176,8 +179,9 @@ def phase(
         seq_gen, total = generator_from_iters_string(iters)
         
         # initialise random object
-        Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
-        cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
+        if O_in is None:
+            Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
+            cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
         data_projection.cfft(O, O, 1)
         bak.fill(0.)
         
@@ -269,6 +273,11 @@ if __name__ == '__main__':
         S = pipe['support']
     else :
         S = None
+
+    if 'object' in pipe :
+        O = pipe['object']
+    else :
+        O = None
     
     if 'mask' in pipe :
         print('loading intensity mask from input', file=sys.stderr)
@@ -290,7 +299,7 @@ if __name__ == '__main__':
             S = np.fft.ifftshift(S)
     
     phasor = phase(
-                I, S=S, mask = mask, iters=' '.join(args.iters), 
+                I, O, S=S, mask = mask, iters=' '.join(args.iters), 
                 reality = args.reality, 
                 radial_background_correction = args.radial_background_correction, 
                 voxel_number = args.voxel_number, 
