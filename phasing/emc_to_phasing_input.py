@@ -23,18 +23,18 @@ if __name__ == '__main__':
                         help="sample size in nm for initial support, if 0 then size is set to = shape / 2")
     args = parser.parse_args()
 
+# merge with emc intensities
+d = pickle.load(args.input)
+I       = np.fft.ifftshift(d['I'])
+overlap = np.fft.ifftshift(d['overlap'])
+dq      = d['dq']
+
 # assume cube
 assert(np.allclose(I.shape, I.shape[0]))
 
-# merge with emc intensities
-d = pickle.load(args.input)
-I_emc   = np.fft.ifftshift(d['I'])
-overlap = np.fft.ifftshift(d['overlap'])
-dq      = np.fft.ifftshift(d['dq'])
-
 i = np.fft.fftfreq(I.shape[0], 1/I.shape[0])
 r = (i[:,None,None]**2 + i[None,:,None]**2 + i[None,None,:]**2)**0.5
-mask = np.ones(I.shape, dtype = np.bool)
+mask = np.ones(I.shape, dtype = bool)
 rmax = i.max()
 
 # mask inner pixels (allow to float) if overlap is zero and within beamstop region
