@@ -22,6 +22,11 @@ if __name__ == '__main__':
                         help="write intermediate results to output every 'update_freq' iterations")
     parser.add_argument('--inversion_symmetry', default=False, action='store_true', \
                         help="enforce inversion symmetry (real Fourier values) at each iteration")
+    parser.add_argument('--D6', default=False, action='store_true', \
+                        help="enforce voxel perfect symmetry opperations from"
+                        "the point group D6 at each iteration")
+    parser.add_argument('--fftshift', default=False, action='store_true', \
+                        help="fftshift output")
     parser.add_argument('-c', '--centre', default=True, action='store_true', \
                         help="Centre the object accourding to the centre-of-mass of the support before output")
     parser.add_argument('--no-centre', dest='centre', action='store_false')
@@ -57,7 +62,7 @@ def phase(
     voxel_number = None, update_freq=None, repeats=1,
     centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False,
     shrink_sig = None, shrink_thresh = None, shrink_update = None,
-    inversion_symmetry = False
+    inversion_symmetry = False, fftshift=None, D6=None
     ):
 
     # initialise opencl context, device, queue and reikna thread
@@ -161,7 +166,7 @@ def phase(
     # initialise projections
     support_projection = Support_projection(opencl_stuff, I.shape, 
                                             S, voxel_number, threshold, reality,      
-                                            radial_background_correction)
+                                            radial_background_correction, D6)
     
     data_projection = Data_projection(opencl_stuff, I, O, mask,  
                                       radial_background_correction,
@@ -240,6 +245,7 @@ def phase(
             # output results 
             iteration += 1
             if (update_freq and iteration % update_freq == 0) or iteration == total :
+                print('sending output...', file=sys.stderr)
                 if apply_support_before_output :
                     support_projection(O, O, bak, bak)
                     
@@ -248,12 +254,19 @@ def phase(
                 
                 if centre :
                     Oc, Sc = centre_object(Oc, Sc)
+
+                if fftshift:
+                    Oc = np.fft.fftshift(Oc)
+                    Sc = np.fft.fftshift(Sc)
                 
                 out = {'object': Oc, 
                        'error': np.array(errs), }
                 
                 if radial_background_correction :
-                     out['radial_background'] = bak.get()**2
+                    out['radial_background'] = bak.get()**2
+
+                    if fftshift:
+                        out['radial_background'] = np.fft.fftshift(out['radial_background'])
                 
                 #if voxel_number :
                 #     out['support'] = Sc
@@ -312,7 +325,9 @@ if __name__ == '__main__':
                 shrink_sig = sig, 
                 shrink_thresh = thresh, 
                 shrink_update = period, 
-                inversion_symmetry = args.inversion_symmetry
+                inversion_symmetry = args.inversion_symmetry,
+                fftshift = args.fftshift,
+                D6 = args.D6
     )
     
     for out in phasor:        
