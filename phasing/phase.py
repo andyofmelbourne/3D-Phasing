@@ -38,48 +38,48 @@ if __name__ == '__main__':
 
 import numpy as np
 import pyopencl as cl
-import pyopencl.array 
+import pyopencl.array
 import tqdm
 import pickle
 
-
 import phasing.phase_routines
-from phasing.phase_routines import (Opencl_init, 
-                                    Support_projection, 
-                                    Data_projection,  
+from phasing.phase_routines import (Opencl_init,
+                                    Support_projection,
+                                    Data_projection,
                                     generator_from_iters_string,
-                                    centre_object, 
+                                    centre_object,
                                     shrinkwrap)
 
+
 def phase(
-    I, O_in=None, S=None, mask=None, iters="100DM 100ERA", 
-    reality=False, radial_background_correction = False, 
+    I, O_in=None, S=None, mask=None, iters="100DM 100ERA",
+    reality=False, radial_background_correction = False,
     voxel_number = None, update_freq=None, repeats=1,
     centre = False, HIO_beta=1., threshold=None, apply_support_before_output=False,
     shrink_sig = None, shrink_thresh = None, shrink_update = None,
     inversion_symmetry = False
     ):
-    
+
     # initialise opencl context, device, queue and reikna thread
     opencl_stuff = Opencl_init()
-    
+
     # DM: modes += Pmod(modes_sup * 2 - modes) - modes_sup
     cl_code = cl.Program(opencl_stuff.context, r"""
         #include <pyopencl-complex.h>
         // O2 = Psup(O)
         __kernel void DM1 (
-            __global cfloat_t *O, 
+            __global cfloat_t *O,
             __global cfloat_t *O2
             )
         {
         int i = get_global_id(0);
-        
+
         O[i].x -= O2[i].x;
         O[i].y -= O2[i].y;
         O2[i].x -= O[i].x;
         O2[i].y -= O[i].y;
         }
-        
+ 
         // O2 = Pmod(2*Psup(O) - O)
         __kernel void DM2 (
             __global cfloat_t *O, 
@@ -87,7 +87,7 @@ def phase(
             )
         {
         int i = get_global_id(0);
-        
+
         O[i].x += O2[i].x;
         O[i].y += O2[i].y;
         }
@@ -98,21 +98,21 @@ def phase(
             )
         {
         int i = get_global_id(0);
-        
+
         bak[i] -= bak2[i];
         bak2[i] -= bak[i];
         }
-        
+ 
         __kernel void DM2_bak (
             __global float *bak, 
             __global const float *bak2
             )
         {
         int i = get_global_id(0);
-        
+ 
         bak[i] += bak2[i];
         }
-        
+
         __kernel void HIO (
             __global cfloat_t *O, 
             __global cfloat_t *Om,
@@ -121,7 +121,7 @@ def phase(
             )
         {
         int i = get_global_id(0);
-        
+ 
         O[i].x = S[i] * Om[i].x;
         O[i].y = S[i] * Om[i].y;
         
@@ -261,8 +261,8 @@ def phase(
                 
                 errs = []
                 yield out
-   
-      
+
+
 if __name__ == '__main__':
     # 1. read in electron density from stdin
     pipe = pickle.load(args.input)
