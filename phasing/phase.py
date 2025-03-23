@@ -148,6 +148,16 @@ def phase(
         O2[i].x = O[i].x;
         O2[i].y = O[i].y;
         }
+
+        __kernel void copyb (
+            __global const float *bak, 
+            __global float *bak2
+            )
+        {
+        int i = get_global_id(0);
+        
+        bak2[i] = bak[i];
+        }
     """).build()
 	
     # initialise object
@@ -200,7 +210,16 @@ def phase(
         it = tqdm.tqdm(seq_gen, total = total, desc='IPA', file=sys.stderr)
         iteration = 0
         ERA_iterations = 0 
+        DM_iterations = 0 
+        last_alg = None
         for alg in it:
+            if alg != last_alg:
+                if alg == 'DM' or alg == 'HIO':
+                    cl_code.copyO(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
+
+                if alg == 'DM':
+                    cl_code.copyb(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
+
             if alg == 'ERA':
                 ERA_iterations += 1
                 
@@ -218,6 +237,8 @@ def phase(
                 data_projection(O2, bak)
                 
             elif alg == 'DM':
+                DM_iterations += 1
+
                 support_projection(O, O2, bak, bak2)
                 
                 cl_code.DM1(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
@@ -229,18 +250,26 @@ def phase(
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
             
             if shrink_sig is not None and alg == 'ERA' and ERA_iterations % shrink_update == 0 :
+            # if shrink_sig is not None and alg == 'DM' and DM_iterations % shrink_update == 0 :
+                #data_projection(O, bak)
+
                 #print(f'\nshrinkwrap iteration = {iteration} shrinkwrap_index {shrinkwrap_index}\n', file=sys.stderr)
                 St = support_projection.S.get()
                 
                 shrinkwrap(O.get(), St, sig = shrink_sig, thresh = shrink_thresh, iteration = iteration)
                 
                 support_projection.S.set(St) 
+
+                #cl_code.copyO(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
+                #cl_code.copyb(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
                  
             opencl_stuff.queue.finish()
              
             it.set_description('IPA {} {:.2e}'.format(alg, data_projection.amp_err))
             
             errs.append(data_projection.amp_err)
+
+            last_alg = alg
             
             # output results 
             iteration += 1
