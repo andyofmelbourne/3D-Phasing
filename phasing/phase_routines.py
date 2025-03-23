@@ -6,6 +6,8 @@ import numpy as np
 import re
 import sys
 
+from phasing import symmetry
+
 from reikna.algorithms import Reduce, Predicate, predicate_sum
 from reikna.cluda import Snippet
 from reikna.core import Annotation, Type, Transformation, Parameter
@@ -296,6 +298,7 @@ class Support_projection():
                  reality, radial_background_correction,
                 D6=False):
         self.queue = opencl_stuff.queue
+        self.context = opencl_stuff.context
         
         self.cl_code = cl.Program(opencl_stuff.context, r"""        
         #include <pyopencl-complex.h>
@@ -368,6 +371,9 @@ class Support_projection():
             self.threshold = threshold 
 
         self.D6 = D6
+
+        if D6:
+            self.d6_cl = symmetry.D6_opencl(S.shape, self.context, self.queue)
         
         self.voxel_number = voxel_number
         self.radial_background_correction = radial_background_correction 
@@ -392,8 +398,11 @@ class Support_projection():
             self.radav(bakin)
             self.radav.broadcast(bakout)
 
-        # slow
         if self.D6:
+            self.d6_cl.apply(Oout)
+
+            # slow
+            """
             O = np.fft.fftshift(Oout.get())
             overlap = np.ones_like(O)
 
@@ -415,6 +424,7 @@ class Support_projection():
             O = np.fft.ifftshift(O)
 
             Oout.set(O)
+            """
         
 
 
