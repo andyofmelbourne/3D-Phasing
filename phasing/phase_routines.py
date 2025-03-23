@@ -246,9 +246,13 @@ class Opencl_init():
                 devices = p.get_devices()
                 if len(devices) > 0:
                     break
+
+        # choose a random device to spread load
+        d = np.random.randint(0, len(devices))
+        device = devices[d]
         
-        self.context = cl.Context(devices)
-        self.queue   = cl.CommandQueue(self.context)
+        self.context = cl.Context([device])
+        self.queue = cl.CommandQueue(self.context, device)
         
         # for the reikna module
         self.api = cluda.ocl_api()
