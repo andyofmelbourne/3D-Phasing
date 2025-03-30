@@ -176,11 +176,12 @@ def phase(
     # initialise projections
     support_projection = Support_projection(opencl_stuff, I.shape, 
                                             S, voxel_number, threshold, reality,      
-                                            radial_background_correction, D6)
+                                            radial_background_correction, D6=D6)
     
     data_projection = Data_projection(opencl_stuff, I, O, mask,  
                                       radial_background_correction,
-                                      real = inversion_symmetry)
+                                      real = inversion_symmetry,
+                                      D6 = False)
     
     # initialise DM arrays
     if ('DM' in iters) or ('HIO' in iters) :
@@ -249,9 +250,9 @@ def phase(
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
             
-            if shrink_sig is not None and alg == 'ERA' and ERA_iterations % shrink_update == 0 :
-            # if shrink_sig is not None and alg == 'DM' and DM_iterations % shrink_update == 0 :
-                #data_projection(O, bak)
+            # if shrink_sig is not None and alg == 'ERA' and ERA_iterations % shrink_update == 0 :
+            if shrink_sig is not None and alg == 'DM' and DM_iterations % shrink_update == 0 :
+                data_projection(O, bak)
 
                 #print(f'\nshrinkwrap iteration = {iteration} shrinkwrap_index {shrinkwrap_index}\n', file=sys.stderr)
                 St = support_projection.S.get()

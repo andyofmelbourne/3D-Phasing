@@ -260,8 +260,40 @@ class Opencl_init():
         
 
 
-
 def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
+    """
+    threshold, smooth, expand
+    """
+    from scipy.ndimage import gaussian_filter
+    from scipy.ndimage import label
+    from scipy.ndimage import binary_fill_holes
+
+    p0 = np.sum(S)
+
+    t = np.abs(O)
+    threshold = thresh * np.mean(t[S > 0])
+    S[:] = t > threshold
+
+    t = gaussian_filter(S.astype(float), sig, mode = 'wrap')
+    S[:] = t > 0.3
+
+    # choose 1 connected volume with most "mass"
+    t = np.abs(O) * S
+    t  = np.fft.fftshift(t)
+    labels, num = label(t)
+    mass = [np.sum(t[labels == i]) for i in range(1, num + 1)]
+    i = np.argmax(mass)+1
+    S[:] = labels == i
+    print(f'\n{iteration} found {num} connected regions with a mass of {mass}, choosing label = {i}', file = sys.stderr)
+
+    # shifting and un-shifting is so that we do not split labels across boundary
+    S[:] = np.fft.ifftshift(S)
+
+    p1 = np.sum(S)
+    print(f'\n{iteration} applying shrinkwrap {p0} -> {p1} pixels in mask, with a loss of {p0-p1} pixels, found {num} connected region/s\n', file=sys.stderr)
+
+
+def shrinkwrap_old(O, S, sig = 2, thresh = 0.5, iteration = 0):
     """
     smooth object, threshold
     """
@@ -378,32 +410,25 @@ class Support_projection():
 
         if D6:
             self.d6_cl = symmetry.D6_opencl(S.shape, self.context, self.queue)
+            # self.d6_cl = symmetry.D6_image_cl(S.shape, self.context, self.queue)
+
+            # compile reikna fft class
+            # o = cl.array.empty(opencl_stuff.queue, S.shape, dtype=np.complex64)
+            # self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
         
         self.voxel_number = voxel_number
         self.radial_background_correction = radial_background_correction 
         
     def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True):
-        if self.voxel_number:
-            if self.S0 is not None :
-                Oin = Oin * self.S0
-            self.voxsup(Oin, self.S, tol=1)
-        
-        if self.threshold :
-            #import sys
-            #print(self.threshold, file=sys.stderr)
-            self.threshold_support(self.queue, (Oin.size,), None, Oin.data, self.S.data, self.threshold)
-            #print(np.sum(self.S.get()), file=sys.stderr)
-            #print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
-        
-        if update_Oout :
-            self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)
-        
-        if self.radial_background_correction :
-            self.radav(bakin)
-            self.radav.broadcast(bakout)
-
+        # in-place for now
         if self.D6:
-            self.d6_cl.apply(Oout)
+            # self.cfft(Oin, Oin)
+
+            self.d6_cl.apply(Oin)
+
+            # self.cfft(Oin, Oin, 1)
+
+            # self.d6_cl.apply(Oout)
 
             # slow
             """
@@ -429,11 +454,32 @@ class Support_projection():
 
             Oout.set(O)
             """
+
+        if self.voxel_number:
+            if self.S0 is not None :
+                Oin = Oin * self.S0
+            self.voxsup(Oin, self.S, tol=1)
+        
+        if self.threshold :
+            #import sys
+            #print(self.threshold, file=sys.stderr)
+            self.threshold_support(self.queue, (Oin.size,), None, Oin.data, self.S.data, self.threshold)
+            #print(np.sum(self.S.get()), file=sys.stderr)
+            #print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
+        
+        if update_Oout :
+            self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)
+        
+        if self.radial_background_correction :
+            self.radav(bakin)
+            self.radav.broadcast(bakout)
+
         
 
 
 class Data_projection():
-    def __init__(self, opencl_stuff, I, o, mask, radial_background_correction, real=False):
+    def __init__(self, opencl_stuff, I, o, mask, radial_background_correction,
+                 real=False, D6=False):
         self.cl_code = cl.Program(opencl_stuff.context, r"""        
         #include <pyopencl-complex.h>
 
@@ -575,12 +621,24 @@ class Data_projection():
         
         # sum routine for data error calc
         self.rsum = Reikna_sum(opencl_stuff.thr,  self.amp)
-        
+
         self.queue = opencl_stuff.queue
+        self.context = opencl_stuff.context
+
+        self.D6 = D6
+
+        if D6:
+            self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
+        
     
     def __call__(self, O, bak):
         self.cfft(O, O)
+
+        if self.D6:
+            self.d6_cl.apply(O)
+
         self.Pmod(O, bak)
+
         self.cfft(O, O, 1)
         
         events = self.rsum(self.diff)
