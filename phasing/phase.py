@@ -249,9 +249,11 @@ def phase(
 
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM2_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
+
+            elif alg == 'SHRINK':
             
             # if shrink_sig is not None and alg == 'ERA' and ERA_iterations % shrink_update == 0 :
-            if shrink_sig is not None and alg == 'DM' and DM_iterations % shrink_update == 0 :
+            # if shrink_sig is not None and alg == 'DM' and DM_iterations % shrink_update == 0 :
                 data_projection(O, bak)
 
                 #print(f'\nshrinkwrap iteration = {iteration} shrinkwrap_index {shrinkwrap_index}\n', file=sys.stderr)
