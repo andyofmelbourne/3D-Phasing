@@ -224,7 +224,7 @@ def phase(
             if alg == 'ERA':
                 ERA_iterations += 1
                 
-                support_projection(O, O, bak, bak)
+                support_projection(O, O, bak, bak, alg='ERA')
                 
                 data_projection(O, bak)
                 

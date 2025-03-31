@@ -410,23 +410,25 @@ class Support_projection():
 
         if D6:
             self.d6_cl = symmetry.D6_opencl(S.shape, self.context, self.queue)
-            # self.d6_cl = symmetry.D6_image_cl(S.shape, self.context, self.queue)
+
+            self.d6_ERA_cl = symmetry.D6_image_cl(S.shape, self.context, self.queue)
 
             # compile reikna fft class
-            # o = cl.array.empty(opencl_stuff.queue, S.shape, dtype=np.complex64)
-            # self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
+            o = cl.array.empty(opencl_stuff.queue, S.shape, dtype=np.complex64)
+            self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
         
         self.voxel_number = voxel_number
         self.radial_background_correction = radial_background_correction 
         
-    def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True):
+    def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True, alg='DM'):
         # in-place for now
         if self.D6:
-            # self.cfft(Oin, Oin)
-
-            self.d6_cl.apply(Oin)
-
-            # self.cfft(Oin, Oin, 1)
+            if alg == 'ERA':
+                # self.cfft(Oin, Oin)
+                self.d6_ERA_cl.apply(Oin)
+                # self.cfft(Oin, Oin, 1)
+            else:
+                self.d6_cl.apply(Oin)
 
             # self.d6_cl.apply(Oout)
 
