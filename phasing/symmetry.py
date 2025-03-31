@@ -406,6 +406,7 @@ class D6_image_cl():
         self.context = context
         self.queue = queue
         self.shape = shape
+        self.size = np.prod(shape)
 
     def fill(self, ar_cl):
         self.fill_image(
@@ -432,7 +433,7 @@ class D6_image_cl():
     def apply(self, ar_cl):
         self.amp_phase(
             self.queue,
-            (self.amp.size,),
+            (self.size,),
             None,
             ar_cl.data,
             self.amp,
@@ -445,7 +446,7 @@ class D6_image_cl():
 
         self.amp_phase_inv(
             self.queue,
-            (self.amp.size,),
+            (self.size,),
             None,
             ar_cl.data,
             self.amp,
