@@ -241,8 +241,8 @@ class D6_image_cl():
         flags = mf.READ_WRITE
 
         t = np.empty(shape, dtype=np.float32)
-        # self.I_cl = cl.Image(context, flags, image_format, shape=shape[::-1])
-        self.I_cl = cl.create_image(context, flags, image_format, shape=shape[::-1])
+        self.I_cl = cl.Image(context, flags, image_format, shape=shape[::-1])
+        # self.I_cl = cl.create_image(context, flags, image_format, shape=shape[::-1])
         self.amp = cl.Buffer(context, mf.READ_WRITE, t.nbytes)
         self.phase = cl.Buffer(context, mf.READ_WRITE, t.nbytes)
 
