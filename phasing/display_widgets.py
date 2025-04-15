@@ -4,6 +4,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread, Qt, QSize
 import pyqtgraph as pg 
 import numpy as np
 import numbers
+import sys
 
 pg.setConfigOption('imageAxisOrder', 'row-major') # best performance
 
@@ -40,10 +41,16 @@ class Default_2D(pg.ImageView):
         # convert bool to uint8 for display
         if data.dtype == bool : 
             t = data.astype(np.uint8)
-        
+
+        # convert complex to amp for display
+        elif isinstance(data.ravel()[0], numbers.Real):
+            t = data
+
         # convert complex to amp for display
         elif isinstance(data.ravel()[0], numbers.Complex):
             t = np.abs(data)
+            print(f'{data.ravel()[0].dtype} converting complex to absolute value (float)',
+                  file=sys.stderr)
             
         else :
             t = data
