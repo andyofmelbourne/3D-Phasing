@@ -293,7 +293,7 @@ class D6_image_cl():
         imag[i] = in[i].y;
         }
 
-        __kernel void real_image_inv (
+        __kernel void real_imag_inv (
             global float2 *in,
             global float *real,
             global float *imag
@@ -401,8 +401,8 @@ class D6_image_cl():
         self.D6 = self.code_cl.D6
         self.amp_phase = self.code_cl.amp_phase
         self.amp_phase_inv = self.code_cl.amp_phase_inv
-        self.real_imag = self.code_cl.amp_phase
-        self.real_imag_inv = self.code_cl.amp_phase_inv
+        self.real_imag = self.code_cl.real_imag
+        self.real_imag_inv = self.code_cl.real_imag_inv
         self.context = context
         self.queue = queue
         self.shape = shape
@@ -431,7 +431,7 @@ class D6_image_cl():
         )
 
     def apply(self, ar_cl):
-        self.amp_phase(
+        self.real_imag(
             self.queue,
             (self.size,),
             None,
@@ -444,7 +444,7 @@ class D6_image_cl():
         self.apply_real(self.amp)
         self.apply_real(self.phase)
 
-        self.amp_phase_inv(
+        self.real_imag_inv(
             self.queue,
             (self.size,),
             None,

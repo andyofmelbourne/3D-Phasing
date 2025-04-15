@@ -221,10 +221,13 @@ def phase(
                 if alg == 'DM':
                     cl_code.copyb(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
 
-            if alg == 'ERA':
+            # hack
+            if alg == 'ERA' or alg == 'ERAnosym':
                 ERA_iterations += 1
                 
-                support_projection(O, O, bak, bak, alg='ERA')
+                # if alg != ERA then P222 symmetry will be enforced instead of
+                # D6
+                support_projection(O, O, bak, bak, alg=alg)
                 
                 data_projection(O, bak)
                 
@@ -291,8 +294,11 @@ def phase(
                     Oc = np.fft.fftshift(Oc)
                     Sc = np.fft.fftshift(Sc)
                 
-                out = {'object': Oc, 
+                # testing
+                out = {'object': Oc.T, 
                        'error': np.array(errs), }
+                # out = {'object': Oc, 
+                #        'error': np.array(errs), }
                 
                 if radial_background_correction :
                     out['radial_background'] = bak.get()**2
