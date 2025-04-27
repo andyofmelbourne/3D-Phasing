@@ -279,11 +279,12 @@ def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
     p0 = np.sum(S)
 
     t = np.abs(O)
-    threshold = thresh * np.mean(t[S > 0])
+    t = gaussian_filter(t, sig, mode='wrap')
+    threshold = thresh * np.max(t[S > 0])
     S[:] = t > threshold
 
-    t = gaussian_filter(S.astype(float), sig, mode = 'wrap')
-    S[:] = t > 0.3
+    # t = gaussian_filter(S.astype(float), sig, mode = 'wrap')
+    # S[:] = t > 0.3
 
     # choose 1 connected volume with most "mass"
     t = np.abs(O) * S
@@ -387,17 +388,17 @@ class Support_projection():
         }
         }
         """).build()
-        
+
         if S is not None :
             self.S  = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
             self.S0 = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
         else :
             self.S0 = None
             self.S = cl.array.empty(self.queue, shape, dtype=np.int8)
-        
+
         if voxel_number :
             self.voxsup = VoxSup(opencl_stuff, shape, voxel_number)
-        
+
         if radial_background_correction :
             self.radav = Radial_average(opencl_stuff, shape)
 
@@ -424,10 +425,10 @@ class Support_projection():
             # compile reikna fft class
             o = cl.array.empty(opencl_stuff.queue, S.shape, dtype=np.complex64)
             self.cfft = reikna.fft.FFT(o).compile(opencl_stuff.thr)
-        
+
         self.voxel_number = voxel_number
-        self.radial_background_correction = radial_background_correction 
-        
+        self.radial_background_correction = radial_background_correction
+
     def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True, alg='DM'):
         # in-place for now
         if self.D6:
@@ -466,25 +467,25 @@ class Support_projection():
             """
 
         if self.voxel_number:
-            if self.S0 is not None :
-                Oin = Oin * self.S0
+            if self.S0 is not None:
+                Oin *= self.S0
             self.voxsup(Oin, self.S, tol=1)
-        
-        if self.threshold :
-            #import sys
-            #print(self.threshold, file=sys.stderr)
+
+        if self.threshold:
+            # import sys
+            # print(self.threshold, file=sys.stderr)
             self.threshold_support(self.queue, (Oin.size,), None, Oin.data, self.S.data, self.threshold)
-            #print(np.sum(self.S.get()), file=sys.stderr)
-            #print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
-        
-        if update_Oout :
+            # print(np.sum(self.S.get()), file=sys.stderr)
+            # print(np.max(np.abs(Oin.get())**2), file=sys.stderr)
+
+        if update_Oout:
             self.support_proj(self.queue, (Oin.size,), None, Oin.data, Oout.data, self.S.data)
-        
-        if self.radial_background_correction :
+
+        if self.radial_background_correction:
             self.radav(bakin)
             self.radav.broadcast(bakout)
 
-        
+
 
 
 class Data_projection():
@@ -639,18 +640,19 @@ class Data_projection():
 
         if D6:
             self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
+            # self.d6_cl = symmetry.D6_opencl(I.shape, self.context, self.queue)
         
     
     def __call__(self, O, bak):
         self.cfft(O, O)
 
-        if self.D6:
-            self.d6_cl.apply(O)
-
         self.Pmod(O, bak)
 
         self.cfft(O, O, 1)
-        
+
+        if self.D6:
+            self.d6_cl.apply(O)
+
         events = self.rsum(self.diff)
         [e.wait() for e in events]
         self.amp_err = (self.rsum.out.get()/self.I_norm)**0.5
