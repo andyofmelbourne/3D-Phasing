@@ -279,8 +279,12 @@ def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
     p0 = np.sum(S)
 
     t = np.abs(O)
+    # t = np.real(O)
+    # if np.sum(t[S > 0] < 0):
+    #     t *= -1
+    # t[t < 0] = 0
     t = gaussian_filter(t, sig, mode='wrap')
-    threshold = thresh * np.max(t[S > 0])
+    threshold = thresh * np.mean(t[S > 0])
     S[:] = t > threshold
 
     # t = gaussian_filter(S.astype(float), sig, mode = 'wrap')
@@ -288,7 +292,8 @@ def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
 
     # choose 1 connected volume with most "mass"
     t = np.abs(O) * S
-    t  = np.fft.fftshift(t)
+    t = np.real(O) * S
+    t = np.fft.fftshift(t)
     labels, num = label(t)
     mass = [np.sum(t[labels == i]) for i in range(1, num + 1)]
     i = np.argmax(mass)+1
@@ -297,6 +302,7 @@ def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
 
     # shifting and un-shifting is so that we do not split labels across boundary
     S[:] = np.fft.ifftshift(S)
+    # num = -1
 
     p1 = np.sum(S)
     print(f'\n{iteration} applying shrinkwrap {p0} -> {p1} pixels in mask, with a loss of {p0-p1} pixels, found {num} connected region/s\n', file=sys.stderr)
@@ -429,9 +435,11 @@ class Support_projection():
         self.voxel_number = voxel_number
         self.radial_background_correction = radial_background_correction
 
-    def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True, alg='DM'):
+    def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True, alg='DM',
+                 vox=True):
         # in-place for now
         if self.D6:
+            # if True:
             if alg == 'ERA':
                 # self.cfft(Oin, Oin)
                 self.d6_ERA_cl.apply(Oin)
@@ -466,7 +474,7 @@ class Support_projection():
             Oout.set(O)
             """
 
-        if self.voxel_number:
+        if self.voxel_number and vox:
             if self.S0 is not None:
                 Oin *= self.S0
             self.voxsup(Oin, self.S, tol=1)
@@ -639,8 +647,8 @@ class Data_projection():
         self.D6 = D6
 
         if D6:
-            # self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
-            self.d6_cl = symmetry.D6_opencl(I.shape, self.context, self.queue)
+            self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
+            # self.d6_cl = symmetry.D6_opencl(I.shape, self.context, self.queue)
         
     
     def __call__(self, O, bak):

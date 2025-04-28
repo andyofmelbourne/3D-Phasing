@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--centre', default=True, action='store_true', \
                         help="Centre the object accourding to the centre-of-mass of the support before output")
     parser.add_argument('--no-centre', dest='centre', action='store_false')
-    parser.add_argument('--HIO_beta', type=float, default=1., \
+    parser.add_argument('--HIO_beta', nargs=2, type=float, default=[1., 1.], \
                         help="Feedback parameter for HIO")
     parser.add_argument('-i', '--input', type=argparse.FileType('rb'), default=sys.stdin.buffer, \
                         help="Python pickle file containing a dictionary with keys 'intensity' and 'support'")
@@ -177,13 +177,13 @@ def phase(
     # initialise projections
     support_projection = Support_projection(
         opencl_stuff, I.shape, S, voxel_number,
-        threshold, reality, radial_background_correction, D6=False
+        threshold, reality, radial_background_correction, D6=D6
     )
 
     data_projection = Data_projection(opencl_stuff, I, O, mask,
                                       radial_background_correction,
                                       real=inversion_symmetry,
-                                      D6=D6)
+                                      D6=False)
 
     # initialise DM arrays
     if ('DM' in iters) or ('HIO' in iters):
@@ -207,6 +207,15 @@ def phase(
             sigmas = np.linspace(
                 shrink_sig_start, shrink_sig_stop, shrink_iterations
             )
+
+        # get total number of RAAR iterations
+        raar_iterations = iters.count('RAAR')
+        raar_iteration = 0
+        if raar_iterations > 0:
+            betas = np.linspace(
+                beta[0], beta[1], raar_iterations+1
+            )
+            print(f'{betas=}', file=sys.stderr)
 
         # initialise random object
         if O_in is None:
@@ -267,27 +276,32 @@ def phase(
             # O3 += b O2
             # O = O3
             elif alg == 'RAAR':
+                beta_i = betas[raar_iteration]
+                if alg != last_alg:
+                    raar_iteration += 1
+                print(f'{beta_i=}', file=sys.stderr)
+
                 # O2 = Pm O
                 O2[:] = O
                 data_projection(O2, bak)
 
                 # O3 = (1-b) O2  # (1-b)Pm
-                O3[:] = (1-beta) * O2
+                O3[:] = (1-beta_i) * O2
 
                 # O3 += (b/2) O  # b/2 I
-                O3[:] += beta/2 * O
+                O3[:] += beta_i/2 * O
 
                 # O2 = Rm O = 2 O2 - O
                 O2[:] = 2 * O2 - O
 
                 # O3 -= b/2 O2
-                O3 -= beta/2 * O2
+                O3 -= beta_i/2 * O2
 
                 # O2 = Ps O2
                 support_projection(O2, O2, bak, bak)
 
                 # O3 += b O2
-                O3 += beta * O2
+                O3 += beta_i * O2
 
                 # O = O3
                 O[:] = O3
@@ -295,7 +309,7 @@ def phase(
             elif alg == 'DM':
                 DM_iterations += 1
 
-                support_projection(O, O2, bak, bak2)
+                support_projection(O, O2, bak, bak2, vox=False)
                 
                 cl_code.DM1(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM1_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
