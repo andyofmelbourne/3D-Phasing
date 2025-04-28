@@ -349,10 +349,10 @@ def phase(
                     Sc = np.fft.fftshift(Sc)
                 
                 # testing
-                out = {'object': Oc.T, 
-                       'error': np.array(errs), }
-                # out = {'object': Oc, 
+                # out = {'object': Oc.T, 
                 #        'error': np.array(errs), }
+                out = {'object': Oc, 
+                       'error': np.array(errs), }
                 
                 if radial_background_correction :
                     out['radial_background'] = bak.get()**2
