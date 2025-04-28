@@ -639,8 +639,8 @@ class Data_projection():
         self.D6 = D6
 
         if D6:
-            self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
-            # self.d6_cl = symmetry.D6_opencl(I.shape, self.context, self.queue)
+            # self.d6_cl = symmetry.D6_image_cl(I.shape, self.context, self.queue)
+            self.d6_cl = symmetry.D6_opencl(I.shape, self.context, self.queue)
         
     
     def __call__(self, O, bak):
