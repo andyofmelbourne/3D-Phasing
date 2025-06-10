@@ -27,6 +27,8 @@ if __name__ == '__main__':
                         "the point group D6 at each iteration")
     parser.add_argument('--fftshift', default=False, action='store_true', \
                         help="fftshift output")
+    parser.add_argument('--positive', default=False, action='store_true', \
+                        help="enforce positivity")
     parser.add_argument('-c', '--centre', default=True, action='store_true', \
                         help="Centre the object accourding to the centre-of-mass of the support before output")
     parser.add_argument('--no-centre', dest='centre', action='store_false')
@@ -63,7 +65,7 @@ def phase(
     voxel_number = None, update_freq=None, repeats=1,
     centre = False, beta=1., threshold=None, apply_support_before_output=False,
     shrink_sig_start = None, shrink_sig_stop = None, shrink_thresh = None,
-    inversion_symmetry = False, fftshift=None, D6=None
+    inversion_symmetry = False, fftshift=None, positive=False, D6=None
     ):
 
     # initialise opencl context, device, queue and reikna thread
@@ -177,7 +179,7 @@ def phase(
     # initialise projections
     support_projection = Support_projection(
         opencl_stuff, I.shape, S, voxel_number,
-        threshold, reality, radial_background_correction, D6=D6
+        threshold, reality, positive, radial_background_correction, D6=D6
     )
 
     data_projection = Data_projection(opencl_stuff, I, O, mask,
@@ -251,6 +253,7 @@ def phase(
                 # if alg != ERA then P222 symmetry will be enforced instead of
                 # D6
                 support_projection(O, O, bak, bak, alg=alg)
+                # support_projection(O, O, bak, bak, alg=None)
 
                 data_projection(O, bak)
 
@@ -361,23 +364,23 @@ def phase(
                 if fftshift:
                     Oc = np.fft.fftshift(Oc)
                     Sc = np.fft.fftshift(Sc)
-                
+
                 # testing
-                # out = {'object': Oc.T, 
+                # out = {'object': Oc.T,
                 #        'error': np.array(errs), }
-                out = {'object': Oc, 
+                out = {'object': Oc,
                        'error': np.array(errs), }
-                
+
                 if radial_background_correction :
                     out['radial_background'] = bak.get()**2
 
                     if fftshift:
                         out['radial_background'] = np.fft.fftshift(out['radial_background'])
-                
+
                 #if voxel_number :
                 #     out['support'] = Sc
                 out['support'] = Sc.astype(bool)
-                
+
                 errs = []
                 yield out
 
@@ -433,6 +436,7 @@ if __name__ == '__main__':
                 shrink_thresh = thresh,
                 inversion_symmetry = args.inversion_symmetry,
                 fftshift = args.fftshift,
+                positive = args.positive,
                 D6 = args.D6
     )
 

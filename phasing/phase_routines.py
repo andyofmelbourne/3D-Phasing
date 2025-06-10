@@ -292,7 +292,7 @@ def shrinkwrap(O, S, sig = 2, thresh = 0.5, iteration = 0):
 
     # choose 1 connected volume with most "mass"
     t = np.abs(O) * S
-    t = np.real(O) * S
+    # t = np.real(O) * S
     t = np.fft.fftshift(t)
     labels, num = label(t)
     mass = [np.sum(t[labels == i]) for i in range(1, num + 1)]
@@ -346,7 +346,7 @@ def shrinkwrap_old(O, S, sig = 2, thresh = 0.5, iteration = 0):
     
 class Support_projection():
     def __init__(self, opencl_stuff, shape, S, voxel_number, threshold,
-                 reality, radial_background_correction,
+                 reality, positive, radial_background_correction,
                 D6=False):
         self.queue = opencl_stuff.queue
         self.context = opencl_stuff.context
@@ -363,6 +363,21 @@ class Support_projection():
         
         Oout[i].x = Oin[i].x * S[i];
         Oout[i].y = Oin[i].y * S[i];
+        }
+
+        __kernel void support_positive (
+            __global const cfloat_t *Oin,
+            __global cfloat_t *Oout,
+            __global const char *S
+            )
+        {
+        int i = get_global_id(0);
+        float t;
+
+        t = Oin[i].x * S[i];
+        
+        Oout[i].x = fmax((float)0., t);
+        Oout[i].y = 0.;
         }
         
         __kernel void support_real (
@@ -408,7 +423,9 @@ class Support_projection():
         if radial_background_correction :
             self.radav = Radial_average(opencl_stuff, shape)
 
-        if reality :
+        if positive :
+            self.support_proj = self.cl_code.support_positive
+        elif reality :
             self.support_proj = self.cl_code.support_real
         else :
             self.support_proj = self.cl_code.support
@@ -419,7 +436,7 @@ class Support_projection():
             # for fft factor
             self.threshold = threshold / np.prod(shape)**0.5
         else :
-            self.threshold = threshold 
+            self.threshold = threshold
 
         self.D6 = D6
 
@@ -438,7 +455,7 @@ class Support_projection():
     def __call__(self, Oin, Oout, bakin, bakout, update_Oout=True, alg='DM',
                  vox=True):
         # in-place for now
-        if self.D6:
+        if self.D6 and alg != 'ERAnosym':
             # if True:
             if alg == 'ERA':
                 # self.cfft(Oin, Oin)
@@ -446,33 +463,6 @@ class Support_projection():
                 # self.cfft(Oin, Oin, 1)
             else:
                 self.d6_cl.apply(Oin)
-
-            # self.d6_cl.apply(Oout)
-
-            # slow
-            """
-            O = np.fft.fftshift(Oout.get())
-            overlap = np.ones_like(O)
-
-            O = apply_symmetry(
-                O,
-                'D6',
-                O.shape[0]//2
-            )
-
-            overlap = apply_symmetry(
-                overlap,
-                'D6',
-                O.shape[0]//2
-            )
-
-            overlap[overlap == 0] = 1
-            O /= overlap
-
-            O = np.fft.ifftshift(O)
-
-            Oout.set(O)
-            """
 
         if self.voxel_number and vox:
             if self.S0 is not None:
