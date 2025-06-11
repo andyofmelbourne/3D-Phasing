@@ -168,9 +168,10 @@ def phase(
     O = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.complex64)
 
     # fill zeros in I for initialisation
-    amp = np.fft.fftshift(np.sqrt(I))
-    amp = gaussian_filter(amp, 8, mode='wrap')
-    amp[mask] = np.sqrt(I)
+    if mask is not None:
+        amp = np.fft.fftshift(np.sqrt(I))
+        amp = gaussian_filter(amp, 8, mode='wrap')
+        amp[mask] = np.sqrt(I)[mask]
 
     if O_in is not None :
         cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(O_in.astype(np.complex64)))
