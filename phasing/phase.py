@@ -1,5 +1,6 @@
 import argparse
 import sys
+from scipy.ndimage import gaussian_filter
 
 if __name__ == '__main__':
     description = "Phase a far-field diffraction volume using iterative projection algorithms."
