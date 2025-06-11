@@ -166,6 +166,11 @@ def phase(
     # initialise object
     O = cl.array.empty(opencl_stuff.queue, I.shape, dtype=np.complex64)
 
+    # fill zeros in I for initialisation
+    amp = np.fft.fftshift(np.sqrt(I))
+    amp = gaussian_filter(amp, 8, mode='wrap')
+    amp[mask] = np.sqrt(I)
+
     if O_in is not None :
         cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(O_in.astype(np.complex64)))
 
@@ -221,7 +226,7 @@ def phase(
 
         # initialise random object
         if O_in is None:
-            Oc = np.sqrt(I) * np.exp(2J * np.pi * np.random.random(I.shape))
+            Oc = amp * np.exp(2J * np.pi * np.random.random(I.shape))
             cl.enqueue_copy(opencl_stuff.queue, O.data, np.ascontiguousarray(Oc.astype(np.complex64)))
         data_projection.cfft(O, O, 1)
         bak.fill(0.)
