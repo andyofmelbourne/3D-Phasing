@@ -456,13 +456,16 @@ class Support_projection():
                  vox=True):
         # in-place for now
         if self.D6 and alg != 'ERAnosym':
-            # if True:
+            if True:
+                self.d6_cl.apply(Oin)
+            """
             if alg == 'ERA':
                 # self.cfft(Oin, Oin)
                 self.d6_ERA_cl.apply(Oin)
                 # self.cfft(Oin, Oin, 1)
             else:
                 self.d6_cl.apply(Oin)
+            """
 
         if self.voxel_number and vox:
             if self.S0 is not None:
