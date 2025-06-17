@@ -415,7 +415,8 @@ class Support_projection():
             self.S0 = cl.array.to_device(self.queue, np.ascontiguousarray(S.astype(np.int8)))
         else :
             self.S0 = None
-            self.S = cl.array.empty(self.queue, shape, dtype=np.int8)
+            # self.S = cl.array.empty(self.queue, shape, dtype=np.int8)
+            self.S = cl.array.to_device(self.queue, np.ones(shape, dtype=np.int8))
 
         if voxel_number :
             self.voxsup = VoxSup(opencl_stuff, shape, voxel_number)

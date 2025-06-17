@@ -319,11 +319,11 @@ def phase(
             elif alg == 'DM':
                 DM_iterations += 1
 
-                support_projection(O, O2, bak, bak2, vox=False)
-                
+                support_projection(O, O2, bak, bak2)
+
                 cl_code.DM1(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
                 cl_code.DM1_bak(opencl_stuff.queue, (bak.size,), None, bak.data, bak2.data)
-                
+
                 data_projection(O2, bak)
 
                 cl_code.DM2(opencl_stuff.queue, (O.size,), None, O.data, O2.data)
@@ -395,9 +395,9 @@ def phase(
 if __name__ == '__main__':
     # 1. read in electron density from stdin
     pipe = pickle.load(args.input)
-    
+
     I = pipe['intensity']
-    
+
     if 'support' in pipe :
         S = pipe['support']
     else :
@@ -407,7 +407,7 @@ if __name__ == '__main__':
         O = pipe['object']
     else :
         O = None
-    
+
     if 'mask' in pipe :
         print('loading intensity mask from input', file=sys.stderr)
         mask = pipe['mask']
@@ -420,7 +420,7 @@ if __name__ == '__main__':
 
     else :
         sig_start, sig_stop, thresh = [None, None, None]
-        
+
     if args.inversion_symmetry :
         # be sure to centre the support since we have lost translational inveriance
         if S is not None :
